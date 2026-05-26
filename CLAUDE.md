@@ -92,10 +92,11 @@ ENVIRONMENT=development
 ```bash
 # Backend
 cd backend
-uv sync                          # install deps
-uvicorn app.main:app --reload    # run dev server
-pytest                           # run tests
-alembic upgrade head             # run migrations
+uv sync                                            # install deps (creates .venv/)
+uv pip install pytest pytest-asyncio httpx         # install test deps into venv
+.venv/bin/python -m pytest -v                      # run tests (use venv python directly - anaconda intercepts pytest)
+uvicorn app.main:app --reload                      # run dev server
+alembic upgrade head                               # run migrations
 
 # Infra
 cd infra
