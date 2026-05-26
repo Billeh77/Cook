@@ -1,0 +1,38 @@
+[project]
+name = "grocery-list-backend"
+version = "0.1.0"
+description = "Inventory-aware grocery assistant backend"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "sqlmodel>=0.0.21",
+    "alembic>=1.13.0",
+    "psycopg2-binary>=2.9.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "anthropic>=0.34.0",
+    "httpx>=0.27.0",
+    "python-dotenv>=1.0.0",
+    "playwright>=1.45.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-httpx>=0.30.0",
+    "ruff>=0.5.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

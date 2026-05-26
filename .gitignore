@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.env
+*.egg-info/
+dist/
+.pytest_cache/
+.ruff_cache/
+
+# uv
+.python-version
+
+# macOS
+.DS_Store
+
+# Xcode
+*.xcuserstate
+xcuserdata/
+DerivedData/
+*.xcworkspace/xcuserdata/
+.build/
+
+# Infra
+infra/postgres_data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
