@@ -74,7 +74,19 @@ async def extract_recipe(caption_text: str) -> RecipeDraft:
             ],
         )
 
-        raw_json = message.content[0].text.strip()
+        raw_text = message.content[0].text.strip()
+        print(f"[recipe_extractor] raw response: {raw_text[:200]}")
+
+        # Strip markdown code fences if the model wrapped the JSON
+        raw_json = raw_text
+        if raw_json.startswith("```"):
+            raw_json = raw_json.split("```", 2)[1]
+            if raw_json.startswith("json"):
+                raw_json = raw_json[4:]
+            raw_json = raw_json.strip()
+        if raw_json.endswith("```"):
+            raw_json = raw_json[:-3].strip()
+
         data = json.loads(raw_json)
         return RecipeDraft.model_validate(data)
 
