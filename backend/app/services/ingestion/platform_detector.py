@@ -8,6 +8,8 @@ class UnsupportedPlatformError(Exception):
 SUPPORTED_PLATFORMS = {
     "tiktok.com": "tiktok",
     "www.tiktok.com": "tiktok",
+    "vt.tiktok.com": "tiktok",   # TikTok short-share URLs
+    "vm.tiktok.com": "tiktok",   # TikTok short-share URLs (older format)
     "instagram.com": "instagram",
     "www.instagram.com": "instagram",
 }

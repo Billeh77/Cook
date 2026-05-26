@@ -1,126 +1,173 @@
-import json
-import os
-from pydantic import BaseModel
+"""
+Single-pass recipe extraction, normalization, and instruction parsing.
 
+One LLM call returns everything: dish name, ingredients (raw + normalized),
+categories, quantities, and cooking steps if present in the caption.
+
+Cook is a grocery and inventory management app. The canonical_name field is
+the key used to match ingredients against a user's pantry inventory and to
+build grocery lists. Consistency in canonical_name is critical.
+"""
+import json
+from pydantic import BaseModel
 from app.config import settings
 
 
-class IngredientDraft(BaseModel):
-    raw_text: str
-    quantity: str | None = None
-    unit: str | None = None
-    notes: str | None = None
+# ── Output models ─────────────────────────────────────────────────────────────
+
+class ExtractedIngredient(BaseModel):
+    raw_text: str           # exact text from caption, including quantity and descriptors
+    canonical_name: str     # normalized: lowercase, English, singular base ingredient only
+    quantity: str | None    # numeric portion only, e.g. "2", "½", "100"
+    unit: str | None        # "g", "tbsp", "cups", "cloves", "sprigs", etc. — null if unitless
+    category: str           # produce | dairy | meat | pantry | spice | grain | other
+    notes: str | None       # preparation descriptors only, e.g. "thinly sliced", "freshly cracked"
 
 
-class RecipeDraft(BaseModel):
+class RecipeExtraction(BaseModel):
     dish_name: str | None = None
-    ingredients: list[IngredientDraft] = []
-    steps: list[str] = []
+    ingredients: list[ExtractedIngredient] = []
+    steps: list[str] = []   # cooking instructions if present in caption; empty list if not
     confidence: float = 0.0
 
 
-SYSTEM_PROMPT = """You are a recipe extraction assistant. Your job is to extract structured recipe data from social media cooking video captions.
+# ── Prompt ────────────────────────────────────────────────────────────────────
 
-Rules:
-- Return ONLY valid JSON. No explanation, no markdown, no code fences.
-- If the caption does not contain a recipe, return {"dish_name": null, "ingredients": [], "steps": [], "confidence": 0.0}
-- confidence: 1.0 = full recipe with quantities, 0.5 = partial recipe, 0.0 = no recipe detected
-- Preserve original quantities and units exactly as written in the caption
-- Include all ingredients mentioned, even if quantities are missing
-- Steps should be clean sentences derived from the caption instructions"""
+SYSTEM_PROMPT = """\
+You are the recipe extraction engine for Cook, a personal grocery and pantry \
+management app. Users share TikTok and Instagram cooking videos with the app. \
+Your job is to extract structured recipe data from the video caption.
 
-USER_PROMPT_TEMPLATE = """Extract the recipe from this cooking video caption. Return JSON matching this exact schema:
+The data you produce powers three features:
+1. Saved recipe cards — dish name, creator, ingredient list, optional steps
+2. Inventory matching — canonical_name is matched against the user's pantry \
+   (e.g. "pecorino romano" in pantry → not needed on grocery list)
+3. Grocery list generation — missing canonical_names become shopping items
 
-{{
+Because canonical_name drives inventory and grocery logic, consistency is \
+critical. Follow these normalization rules exactly:
+
+CANONICAL_NAME rules:
+- Lowercase English, singular form of the base ingredient only
+- Strip all quantities, units, brands, preparation methods, and descriptors
+- Translate non-English ingredient names to their standard English equivalent
+- Use the most recognizable common name (prefer "mozzarella" over "fresh \
+  mozzarella cheese")
+- Keep compound names when meaningful as a unit \
+  ("olive oil" not "oil", "soy sauce" not "sauce")
+
+Examples:
+  "100g guanciale"               → "guanciale"
+  "Pecorino Romano 4 spoonfuls"  → "pecorino romano"
+  "½ red onion, thinly sliced"   → "red onion"
+  "Black pepper, freshly cracked"→ "black pepper"
+  "80g of your fav pasta"        → "pasta"
+  "Pasta water"                  → "pasta water"
+  "fio de azeite de oliva"       → "olive oil"
+  "muçarela ralada"              → "mozzarella"
+  "cebolinha"                    → "chives"
+  "a touch of Parmigiano Reggiano" → "parmigiano reggiano"
+
+STEPS rules:
+- Only include steps if the caption actually contains cooking instructions
+- Extract them as clean, concise sentences
+- Preserve the original order
+- If the caption has no instructions, return an empty array []
+
+CONFIDENCE:
+- 1.0 = full recipe with quantities and most ingredients clearly listed
+- 0.7 = recipe found but some ingredients vague or quantities missing
+- 0.4 = only a partial ingredient list
+- 0.0 = caption contains no recipe
+
+Return ONLY valid JSON. No explanation, no markdown, no code fences.\
+"""
+
+SCHEMA = """\
+{
   "dish_name": "string or null",
+  "confidence": 0.0,
   "ingredients": [
-    {{
-      "raw_text": "exact text from caption",
-      "quantity": "number as string or null",
+    {
+      "raw_text": "exact text from caption including quantity and descriptors",
+      "canonical_name": "normalized lowercase english base ingredient",
+      "quantity": "numeric string or null",
       "unit": "unit string or null",
-      "notes": "descriptors like crunchy, fresh, minced or null"
-    }}
+      "category": "produce|dairy|meat|pantry|spice|grain|other",
+      "notes": "prep descriptors only, or null"
+    }
   ],
-  "steps": ["step 1", "step 2"],
-  "confidence": 0.0
-}}
-
-Caption:
-{caption_text}"""
+  "steps": ["step 1", "step 2"]
+}\
+"""
 
 
-async def extract_recipe(caption_text: str) -> RecipeDraft:
+# ── Main function ─────────────────────────────────────────────────────────────
+
+async def extract_recipe(caption_text: str) -> RecipeExtraction:
     """
-    Sends caption text to Claude and returns a structured RecipeDraft.
-    Falls back to empty RecipeDraft with confidence 0.0 on any error.
+    Extracts, normalizes, and structures a full recipe from a caption in one
+    LLM call. Falls back to a deterministic stub when no API key is configured.
     """
     if not settings.anthropic_api_key:
-        # Development fallback: return a fake recipe so the pipeline can be tested
         return _fake_extract(caption_text)
 
-    try:
-        import anthropic
+    import anthropic
+    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
-        client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    user_prompt = (
+        f"Extract the recipe from this cooking video caption.\n\n"
+        f"Return JSON matching this schema:\n{SCHEMA}\n\n"
+        f"Caption:\n{caption_text}"
+    )
+
+    try:
         message = await client.messages.create(
-            model="claude-sonnet-4-5",
+            model="claude-opus-4-5",
             max_tokens=2048,
             system=SYSTEM_PROMPT,
-            messages=[
-                {
-                    "role": "user",
-                    "content": USER_PROMPT_TEMPLATE.format(caption_text=caption_text),
-                }
-            ],
+            messages=[{"role": "user", "content": user_prompt}],
         )
 
-        raw_text = message.content[0].text.strip()
-        print(f"[recipe_extractor] raw response: {raw_text[:200]}")
+        raw = message.content[0].text.strip()
 
         # Strip markdown code fences if the model wrapped the JSON
-        raw_json = raw_text
-        if raw_json.startswith("```"):
-            raw_json = raw_json.split("```", 2)[1]
-            if raw_json.startswith("json"):
-                raw_json = raw_json[4:]
-            raw_json = raw_json.strip()
-        if raw_json.endswith("```"):
-            raw_json = raw_json[:-3].strip()
+        if raw.startswith("```"):
+            raw = raw.split("```", 2)[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+            raw = raw.strip()
+        if raw.endswith("```"):
+            raw = raw[:-3].strip()
 
-        data = json.loads(raw_json)
-        return RecipeDraft.model_validate(data)
+        data = json.loads(raw)
+        return RecipeExtraction.model_validate(data)
 
     except json.JSONDecodeError as e:
         print(f"[recipe_extractor] JSON parse error: {e}")
-        return RecipeDraft(confidence=0.0)
+        return RecipeExtraction(confidence=0.0)
     except Exception as e:
-        # Re-raise so the route returns a 500 — a misconfigured API key or bad model ID
-        # should be loud, not silently collapsed into needs_manual_review.
         print(f"[recipe_extractor] error: {type(e).__name__}: {e}")
         raise
 
 
-def _fake_extract(caption_text: str) -> RecipeDraft:
-    """
-    Deterministic fake extractor for development/testing when no API key is set.
-    Detects a few keywords to return a plausible stub.
-    """
+# ── Dev fallback ──────────────────────────────────────────────────────────────
+
+def _fake_extract(caption_text: str) -> RecipeExtraction:
+    """Deterministic stub used when ANTHROPIC_API_KEY is not set."""
     text_lower = caption_text.lower()
     if "noodle" in text_lower or "pasta" in text_lower:
-        return RecipeDraft(
-            dish_name="Noodle Dish (fake extraction)",
+        return RecipeExtraction(
+            dish_name="Noodle Dish (no API key)",
             ingredients=[
-                IngredientDraft(raw_text="noodles", quantity="2", unit="portions"),
-                IngredientDraft(raw_text="peanut butter", quantity="2", unit="tbsp"),
+                ExtractedIngredient(raw_text="noodles", canonical_name="noodle",
+                                    quantity="2", unit="portions", category="grain", notes=None),
+                ExtractedIngredient(raw_text="peanut butter", canonical_name="peanut butter",
+                                    quantity="2", unit="tbsp", category="pantry", notes=None),
             ],
-            steps=["Cook noodles", "Mix sauce", "Combine"],
+            steps=["Cook noodles per packet instructions.", "Mix sauce.", "Combine and serve."],
             confidence=0.5,
         )
     if caption_text.strip():
-        return RecipeDraft(
-            dish_name="Unknown Dish (fake extraction)",
-            ingredients=[],
-            steps=[],
-            confidence=0.2,
-        )
-    return RecipeDraft(confidence=0.0)
+        return RecipeExtraction(dish_name="Unknown dish (no API key)", confidence=0.2)
+    return RecipeExtraction(confidence=0.0)
