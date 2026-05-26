@@ -8,7 +8,7 @@ Update this file when prompts change so Claude Code stays aligned.
 ## 1. Recipe Extraction
 
 **File**: `backend/app/services/ai/recipe_extractor.py`
-**Model**: `claude-3-5-haiku-20241022` (fast, cheap, good at structured extraction)
+**Model**: `claude-sonnet-4-5` (fast, cheap, good at structured extraction)
 **Output**: JSON only, validated against `RecipeDraft` Pydantic model
 
 ### System prompt
@@ -91,7 +91,7 @@ Caption:
 ## 2. Ingredient Normalization
 
 **File**: `backend/app/services/ai/ingredient_normalizer.py`
-**Model**: `claude-3-5-haiku-20241022`
+**Model**: `claude-sonnet-4-5`
 **Output**: JSON only
 
 ### System prompt

@@ -63,7 +63,7 @@ async def extract_recipe(caption_text: str) -> RecipeDraft:
 
         client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
         message = await client.messages.create(
-            model="claude-3-5-haiku-20241022",
+            model="claude-sonnet-4-5",
             max_tokens=2048,
             system=SYSTEM_PROMPT,
             messages=[
