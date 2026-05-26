@@ -63,7 +63,7 @@ async def extract_recipe(caption_text: str) -> RecipeDraft:
 
         client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
         message = await client.messages.create(
-            model="claude-haiku-4-5",
+            model="claude-haiku-4-5-20251101",
             max_tokens=2048,
             system=SYSTEM_PROMPT,
             messages=[
@@ -78,10 +78,14 @@ async def extract_recipe(caption_text: str) -> RecipeDraft:
         data = json.loads(raw_json)
         return RecipeDraft.model_validate(data)
 
-    except Exception as e:
-        # Log and return low-confidence result so the caller can handle gracefully
-        print(f"[recipe_extractor] error: {e}")
+    except json.JSONDecodeError as e:
+        print(f"[recipe_extractor] JSON parse error: {e}")
         return RecipeDraft(confidence=0.0)
+    except Exception as e:
+        # Re-raise so the route returns a 500 — a misconfigured API key or bad model ID
+        # should be loud, not silently collapsed into needs_manual_review.
+        print(f"[recipe_extractor] error: {type(e).__name__}: {e}")
+        raise
 
 
 def _fake_extract(caption_text: str) -> RecipeDraft:
