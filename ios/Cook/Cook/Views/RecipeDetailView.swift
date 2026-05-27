@@ -1,5 +1,4 @@
 import SwiftUI
-import WebKit
 
 // MARK: - Main detail view
 
@@ -10,7 +9,6 @@ struct RecipeDetailView: View {
     @State private var recipe: RecipeDetail?
     @State private var isLoading = true
     @State private var error: String?
-    @State private var showFullscreenVideo = false
 
     var body: some View {
         Group {
@@ -24,17 +22,12 @@ struct RecipeDetailView: View {
                 }
                 .padding()
             } else if let recipe {
-                RecipeDetailContent(recipe: recipe, showFullscreenVideo: $showFullscreenVideo)
+                RecipeDetailContent(recipe: recipe)
             }
         }
         .navigationTitle(recipeTitle)
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .fullScreenCover(isPresented: $showFullscreenVideo) {
-            if let recipe, let urlStr = recipe.sourceURL, let url = URL(string: urlStr) {
-                TikTokFullscreenView(url: url, isPresented: $showFullscreenVideo)
-            }
-        }
     }
 
     private func load() async {
@@ -49,13 +42,12 @@ struct RecipeDetailView: View {
 
 private struct RecipeDetailContent: View {
     let recipe: RecipeDetail
-    @Binding var showFullscreenVideo: Bool
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
 
-                TikTokThumbnailPlayer(recipe: recipe, showFullscreen: $showFullscreenVideo)
+                VideoThumbnailCard(recipe: recipe)
 
                 if !recipe.ingredients.isEmpty {
                     SectionCard(title: "Ingredients", icon: "cart") {
@@ -99,11 +91,10 @@ private struct RecipeDetailContent: View {
     }
 }
 
-// MARK: - Thumbnail player card
+// MARK: - Square thumbnail card with platform watch button
 
-private struct TikTokThumbnailPlayer: View {
+private struct VideoThumbnailCard: View {
     let recipe: RecipeDetail
-    @Binding var showFullscreen: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -113,40 +104,43 @@ private struct TikTokThumbnailPlayer: View {
                     .foregroundStyle(.secondary)
             }
 
-            // Tappable thumbnail — tap anywhere to go fullscreen
-            Button { showFullscreen = true } label: {
-                ZStack {
-                    // Thumbnail image
-                    Group {
-                        if let urlStr = recipe.thumbnailURL, let url = URL(string: urlStr) {
-                            AsyncImage(url: url) { phase in
-                                switch phase {
-                                case .success(let img):
-                                    img.resizable().scaledToFill()
-                                case .failure:
-                                    thumbnailPlaceholder
-                                default:
-                                    thumbnailPlaceholder.overlay(ProgressView())
-                                }
+            ZStack(alignment: .bottomTrailing) {
+                // Square thumbnail — scaledToFill so every image looks consistent
+                Group {
+                    if let urlStr = recipe.thumbnailURL, let url = URL(string: urlStr) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let img):
+                                img.resizable().scaledToFill()
+                            default:
+                                thumbnailPlaceholder
                             }
-                        } else {
-                            thumbnailPlaceholder
                         }
+                    } else {
+                        thumbnailPlaceholder
                     }
-                    .aspectRatio(9.0 / 16.0, contentMode: .fit)
-                    .clipped()
+                }
+                .frame(maxWidth: .infinity)
+                .aspectRatio(1, contentMode: .fit)   // always a square
+                .clipped()
 
-                    // Dim overlay
-                    Color.black.opacity(0.25)
-
-                    // Play button
-                    Image(systemName: "play.circle.fill")
-                        .font(.system(size: 64))
+                // Discrete "Watch on …" button — bottom right
+                if let urlStr = recipe.sourceURL, let url = URL(string: urlStr) {
+                    Link(destination: url) {
+                        HStack(spacing: 5) {
+                            Text(watchLabel)
+                                .font(.caption.weight(.semibold))
+                            Image(systemName: "arrow.up.right")
+                                .font(.caption2.weight(.bold))
+                        }
                         .foregroundStyle(.white)
-                        .shadow(color: .black.opacity(0.5), radius: 8, x: 0, y: 2)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(.black.opacity(0.55), in: Capsule())
+                    }
+                    .padding(10)
                 }
             }
-            .buttonStyle(.plain)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
     }
@@ -154,58 +148,22 @@ private struct TikTokThumbnailPlayer: View {
     private var thumbnailPlaceholder: some View {
         Rectangle()
             .fill(Color(.systemGray5))
-            .aspectRatio(9.0 / 16.0, contentMode: .fit)
             .overlay(
                 Image(systemName: "film")
                     .font(.largeTitle)
                     .foregroundStyle(.tertiary)
             )
     }
-}
 
-// MARK: - Fullscreen TikTok player (real WKWebView, not Safari)
-
-struct TikTokFullscreenView: View {
-    let url: URL
-    @Binding var isPresented: Bool
-
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            TikTokBrowserView(url: url)
-                .ignoresSafeArea()
-
-            Button { isPresented = false } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 34))
-                    .symbolRenderingMode(.palette)
-                    .foregroundStyle(.white, Color(.systemGray2).opacity(0.7))
-                    .shadow(radius: 4)
-            }
-            .padding(.top, 56)
-            .padding(.leading, 16)
+    /// "Watch on TikTok", "Watch on Instagram", etc.
+    private var watchLabel: String {
+        switch recipe.platform.lowercased() {
+        case "tiktok":    return "Watch on TikTok"
+        case "instagram": return "Watch on Instagram"
+        case "youtube":   return "Watch on YouTube"
+        default:          return "Watch Video"
         }
-        .background(.black)
     }
-}
-
-// MARK: - WKWebView that loads the real TikTok page
-
-struct TikTokBrowserView: UIViewRepresentable {
-    let url: URL
-
-    func makeUIView(context: Context) -> WKWebView {
-        let config = WKWebViewConfiguration()
-        config.allowsInlineMediaPlayback = true
-        config.mediaTypesRequiringUserActionForPlayback = []
-
-        let webView = WKWebView(frame: .zero, configuration: config)
-        // Mobile Safari UA so TikTok serves the mobile web player
-        webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-        webView.load(URLRequest(url: url))
-        return webView
-    }
-
-    func updateUIView(_ webView: WKWebView, context: Context) {}
 }
 
 // MARK: - Reusable section card
@@ -242,7 +200,7 @@ private struct IngredientDetailRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     if let qty = ingredient.quantity { Text(qty).fontWeight(.medium) }
-                    if let unit = ingredient.unit { Text(unit).foregroundStyle(.secondary) }
+                    if let unit = ingredient.unit    { Text(unit).foregroundStyle(.secondary) }
                     Text(ingredient.canonicalName).fontWeight(.medium)
                 }
                 .font(.subheadline)
