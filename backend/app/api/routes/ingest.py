@@ -93,6 +93,8 @@ async def ingest_link(
         time_minutes=extraction.time_minutes,
         is_batch_prep=extraction.is_batch_prep,
         protein_level=extraction.protein_level,
+        calorie_level=extraction.calorie_level,
+        protein_source=extraction.protein_source,
     )
     session.add(db_recipe)
     session.flush()

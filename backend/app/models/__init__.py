@@ -30,6 +30,8 @@ class Recipe(SQLModel, table=True):
     time_minutes: Optional[int] = None
     is_batch_prep: bool = False
     protein_level: Optional[str] = None   # "high" | "medium" | "low"
+    calorie_level: Optional[str] = None   # "low" | "medium" | "high" — per serving
+    protein_source: Optional[str] = None  # "chicken" | "beef" | "pork" | "fish" | "seafood" | "eggs" | "lamb" | "turkey" | "vegan" | "vegetarian"
 
 
 class Ingredient(SQLModel, table=True):

@@ -164,6 +164,12 @@ private struct RecipeCard: View {
                             if let protein = item.proteinLevel, protein == "high" {
                                 TagChip(text: "High protein", icon: "bolt.fill", color: .green)
                             }
+                            if let cal = item.calorieLevel {
+                                TagChip(calorieTag: cal)
+                            }
+                            if let src = item.proteinSource {
+                                TagChip(proteinSourceTag: src)
+                            }
                         }
                     }
                 }
@@ -191,6 +197,7 @@ private struct RecipeCard: View {
     private var hasTags: Bool {
         item.effort != nil || item.timeMinutes != nil || item.servings != nil
         || item.isBatchPrep || item.proteinLevel == "high"
+        || item.calorieLevel != nil || item.proteinSource != nil
     }
 
     private func timeLabel(_ mins: Int) -> String {
@@ -212,6 +219,35 @@ private struct TagChip: View {
         case "hard":   self.init(text: "Hard",   icon: "flame",         color: .red)
         default:       self.init(text: "Medium", icon: "minus.circle",  color: .orange)
         }
+    }
+
+    // Convenience init for calorie level tags
+    init(calorieTag: String) {
+        switch calorieTag.lowercased() {
+        case "low":  self.init(text: "Low cal",  icon: "leaf",       color: .green)
+        case "high": self.init(text: "High cal", icon: "flame.fill", color: .red)
+        default:     self.init(text: "Med cal",  icon: "equal",      color: .orange)
+        }
+    }
+
+    // Convenience init for protein source tags
+    init(proteinSourceTag: String) {
+        let icon: String
+        switch proteinSourceTag.lowercased() {
+        case "chicken":    icon = "bird"
+        case "beef":       icon = "circle.fill"
+        case "pork":       icon = "circle.fill"
+        case "fish":       icon = "fish"
+        case "seafood":    icon = "water.waves"
+        case "eggs":       icon = "oval"
+        case "lamb":       icon = "circle.fill"
+        case "turkey":     icon = "bird"
+        case "vegan":      icon = "leaf.fill"
+        case "vegetarian": icon = "carrot"
+        default:           icon = "fork.knife"
+        }
+        let label = proteinSourceTag.prefix(1).uppercased() + proteinSourceTag.dropFirst()
+        self.init(text: label, icon: icon, color: .teal)
     }
 
     init(text: String, icon: String? = nil, color: Color = .gray) {

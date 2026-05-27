@@ -35,6 +35,8 @@ class RecipeExtraction(BaseModel):
     time_minutes: int | None = None        # total estimated time in minutes
     is_batch_prep: bool = False            # true if recipe is a weekly batch / meal-prep
     protein_level: str | None = None      # "high" | "medium" | "low"
+    calorie_level: str | None = None      # "low" | "medium" | "high" — per serving
+    protein_source: str | None = None    # "chicken" | "beef" | "pork" | "fish" | "seafood" | "eggs" | "lamb" | "turkey" | "vegan" | "vegetarian"
 
 
 # ── Prompt ────────────────────────────────────────────────────────────────────
@@ -89,6 +91,16 @@ TAGS — infer these from the recipe content:
   large quantities meant to last several days (e.g. big batch of sauce, full tray of protein)
 - protein_level: "high" if main protein is prominent (large cuts of meat, many eggs, legumes \
   as main); "low" if mostly vegetables, grains, or light dishes; "medium" otherwise
+- calorie_level: "low" | "medium" | "high" — estimated calories PER SINGLE SERVING. \
+  Always divide the total recipe calories by the servings count before deciding. \
+  A batch of 8 chicken thighs might be "medium" per serving even if the total is large. \
+  low = under 400 kcal/serving, medium = 400–700 kcal/serving, high = over 700 kcal/serving
+- protein_source: the primary protein source as a single lowercase label. \
+  Use exactly one of: "chicken" | "beef" | "pork" | "fish" | "seafood" | "eggs" | \
+  "lamb" | "turkey" | "vegan" | "vegetarian". \
+  Use "vegan" if the recipe contains no animal products at all. \
+  Use "vegetarian" if it uses dairy or eggs but no meat or fish. \
+  Use null if the protein source is unclear or genuinely mixed.
 
 CONFIDENCE:
 - 1.0 = full recipe with quantities and most ingredients clearly listed
@@ -108,6 +120,8 @@ SCHEMA = """\
   "time_minutes": null,
   "is_batch_prep": false,
   "protein_level": "high|medium|low or null",
+  "calorie_level": "low|medium|high or null",
+  "protein_source": "chicken|beef|pork|fish|seafood|eggs|lamb|turkey|vegan|vegetarian or null",
   "ingredients": [
     {
       "raw_text": "exact text from caption including quantity and descriptors",

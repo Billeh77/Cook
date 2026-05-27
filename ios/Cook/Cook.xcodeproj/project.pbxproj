@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		AF382ECA2FC6189B00091F0A /* ShareRecipes.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AF382EC02FC6189B00091F0A /* ShareRecipes.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AF382F0B2FC67D2100091F0A /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = AF382F0A2FC67D2100091F0A /* Supabase */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -113,6 +114,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AF382F0B2FC67D2100091F0A /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -199,6 +201,7 @@
 			);
 			name = Cook;
 			packageProductDependencies = (
+				AF382F0A2FC67D2100091F0A /* Supabase */,
 			);
 			productName = Cook;
 			productReference = AF7D29522FC56621000D2E4F /* Cook.app */;
@@ -285,6 +288,9 @@
 			);
 			mainGroup = AF7D29492FC56621000D2E4F;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				AF382F092FC67D2100091F0A /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = AF7D29532FC56621000D2E4F /* Products */;
 			projectDirPath = "";
@@ -759,6 +765,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		AF382F092FC67D2100091F0A /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AF382F0A2FC67D2100091F0A /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AF382F092FC67D2100091F0A /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = AF7D294A2FC56621000D2E4F /* Project object */;
 }

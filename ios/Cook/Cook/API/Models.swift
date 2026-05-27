@@ -60,6 +60,8 @@ struct RecipeDetail: Codable, Identifiable {
     let timeMinutes: Int?
     let isBatchPrep: Bool
     let proteinLevel: String?
+    let calorieLevel: String?
+    let proteinSource: String?
 
     enum CodingKeys: String, CodingKey {
         case id, platform, confidence, steps, ingredients
@@ -73,6 +75,8 @@ struct RecipeDetail: Codable, Identifiable {
         case timeMinutes  = "time_minutes"
         case isBatchPrep  = "is_batch_prep"
         case proteinLevel = "protein_level"
+        case calorieLevel = "calorie_level"
+        case proteinSource = "protein_source"
     }
 }
 
@@ -92,6 +96,8 @@ struct CookabilityItem: Codable, Identifiable {
     let timeMinutes: Int?
     let isBatchPrep: Bool
     let proteinLevel: String?
+    let calorieLevel: String?
+    let proteinSource: String?
     let missingCount: Int
     let missingIngredients: [String]
 
@@ -106,6 +112,8 @@ struct CookabilityItem: Codable, Identifiable {
         case timeMinutes       = "time_minutes"
         case isBatchPrep       = "is_batch_prep"
         case proteinLevel      = "protein_level"
+        case calorieLevel      = "calorie_level"
+        case proteinSource     = "protein_source"
         case missingCount      = "missing_count"
         case missingIngredients = "missing_ingredients"
     }
