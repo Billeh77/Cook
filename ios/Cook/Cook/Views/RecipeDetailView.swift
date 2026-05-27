@@ -127,7 +127,7 @@ private struct TikTokPlayerSection: View {
             }
 
             ZStack(alignment: .bottomTrailing) {
-                if let videoID = tiktokVideoID(from: recipe.sourceURL) {
+                if let videoID = tiktokVideoID() {
                     // Direct TikTok iframe — dark player, no white card
                     TikTokWebView(videoID: videoID)
                         .frame(height: playerHeight)
@@ -164,15 +164,24 @@ private struct TikTokPlayerSection: View {
         }
     }
 
-    /// Pulls the numeric video ID out of a TikTok URL.
-    /// e.g. https://www.tiktok.com/@user/video/7123456789012345678 → "7123456789012345678"
-    private func tiktokVideoID(from urlString: String?) -> String? {
-        guard let urlString,
-              let url = URL(string: urlString),
-              url.host?.contains("tiktok.com") == true else { return nil }
-        let parts = url.pathComponents
-        if let idx = parts.firstIndex(of: "video"), idx + 1 < parts.count {
-            return parts[idx + 1]
+    /// Extracts the TikTok video ID, trying two sources in order:
+    /// 1. The source URL path  (works for full tiktok.com/@user/video/ID URLs)
+    /// 2. data-video-id attr in embed_html (works for all URLs incl. short vt.tiktok.com)
+    private func tiktokVideoID() -> String? {
+        // 1. Source URL
+        if let urlString = recipe.sourceURL,
+           let url = URL(string: urlString),
+           url.host?.contains("tiktok.com") == true {
+            let parts = url.pathComponents
+            if let idx = parts.firstIndex(of: "video"), idx + 1 < parts.count {
+                return parts[idx + 1]
+            }
+        }
+        // 2. embed_html: look for data-video-id="7123456789"
+        if let html = recipe.embedHTML,
+           let start = html.range(of: "data-video-id=\"")?.upperBound,
+           let end = html[start...].firstIndex(of: "\"") {
+            return String(html[start..<end])
         }
         return nil
     }
@@ -207,7 +216,7 @@ struct TikTokWebView: UIViewRepresentable {
         </head>
         <body>
           <iframe
-            src="https://www.tiktok.com/embed/v2/\(videoID)?autoplay=1&music_info=1&description=0"
+            src="https://www.tiktok.com/embed/v2/\(videoID)?autoplay=1&loop=1&music_info=1&description=0"
             allow="autoplay; fullscreen; picture-in-picture"
             allowfullscreen>
           </iframe>
