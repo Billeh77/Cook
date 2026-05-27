@@ -1,12 +1,11 @@
 import SwiftUI
 import WebKit
-import SafariServices
 
 // MARK: - Main detail view
 
 struct RecipeDetailView: View {
     let recipeId: String
-    let recipeTitle: String  // shown immediately while loading
+    let recipeTitle: String
 
     @State private var recipe: RecipeDetail?
     @State private var isLoading = true
@@ -33,23 +32,20 @@ struct RecipeDetailView: View {
         .task { await load() }
         .fullScreenCover(isPresented: $showFullscreenVideo) {
             if let recipe, let urlStr = recipe.sourceURL, let url = URL(string: urlStr) {
-                FullscreenVideoView(url: url, isPresented: $showFullscreenVideo)
+                TikTokFullscreenView(url: url, isPresented: $showFullscreenVideo)
             }
         }
     }
 
     private func load() async {
         isLoading = true
-        do {
-            recipe = try await APIClient.shared.getRecipe(id: recipeId)
-        } catch {
-            self.error = error.localizedDescription
-        }
+        do { recipe = try await APIClient.shared.getRecipe(id: recipeId) }
+        catch { self.error = error.localizedDescription }
         isLoading = false
     }
 }
 
-// MARK: - Content (scrollable body)
+// MARK: - Scrollable content
 
 private struct RecipeDetailContent: View {
     let recipe: RecipeDetail
@@ -59,24 +55,19 @@ private struct RecipeDetailContent: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
 
-                // ── Video player ──────────────────────────────────────────────
-                TikTokPlayerSection(recipe: recipe, showFullscreen: $showFullscreenVideo)
+                TikTokThumbnailPlayer(recipe: recipe, showFullscreen: $showFullscreenVideo)
 
-                // ── Ingredients ───────────────────────────────────────────────
                 if !recipe.ingredients.isEmpty {
                     SectionCard(title: "Ingredients", icon: "cart") {
                         VStack(alignment: .leading, spacing: 10) {
                             ForEach(recipe.ingredients) { ing in
                                 IngredientDetailRow(ingredient: ing)
-                                if ing.id != recipe.ingredients.last?.id {
-                                    Divider()
-                                }
+                                if ing.id != recipe.ingredients.last?.id { Divider() }
                             }
                         }
                     }
                 }
 
-                // ── Instructions (optional) ───────────────────────────────────
                 if !recipe.steps.isEmpty {
                     SectionCard(title: "Instructions", icon: "list.number") {
                         VStack(alignment: .leading, spacing: 14) {
@@ -96,7 +87,6 @@ private struct RecipeDetailContent: View {
                     }
                 }
 
-                // ── Confidence badge ──────────────────────────────────────────
                 HStack {
                     Spacer()
                     Text("Extraction confidence: \(Int(recipe.confidence * 100))%")
@@ -109,9 +99,9 @@ private struct RecipeDetailContent: View {
     }
 }
 
-// MARK: - TikTok player section
+// MARK: - Thumbnail player card
 
-private struct TikTokPlayerSection: View {
+private struct TikTokThumbnailPlayer: View {
     let recipe: RecipeDetail
     @Binding var showFullscreen: Bool
 
@@ -123,73 +113,85 @@ private struct TikTokPlayerSection: View {
                     .foregroundStyle(.secondary)
             }
 
-            ZStack(alignment: .bottomTrailing) {
-                if let videoID = tiktokVideoID() {
-                    // TikTok embed/v2 has an intrinsic 325×578 ratio.
-                    // aspectRatio derives the exact height from the container width
-                    // so nothing is clipped and nothing scrolls inside the view.
-                    TikTokWebView(videoID: videoID)
-                        .aspectRatio(325.0 / 578.0, contentMode: .fit)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                } else if let urlStr = recipe.sourceURL, let url = URL(string: urlStr) {
-                    Link(destination: url) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(.black)
-                                .frame(height: 200)
-                            VStack(spacing: 8) {
-                                Image(systemName: "play.circle.fill")
-                                    .font(.system(size: 48))
-                                    .foregroundStyle(.white)
-                                Text("Watch on TikTok")
-                                    .foregroundStyle(.white.opacity(0.8))
-                                    .font(.subheadline)
+            // Tappable thumbnail — tap anywhere to go fullscreen
+            Button { showFullscreen = true } label: {
+                ZStack {
+                    // Thumbnail image
+                    Group {
+                        if let urlStr = recipe.thumbnailURL, let url = URL(string: urlStr) {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .success(let img):
+                                    img.resizable().scaledToFill()
+                                case .failure:
+                                    thumbnailPlaceholder
+                                default:
+                                    thumbnailPlaceholder.overlay(ProgressView())
+                                }
                             }
+                        } else {
+                            thumbnailPlaceholder
                         }
                     }
-                }
+                    .aspectRatio(9.0 / 16.0, contentMode: .fit)
+                    .clipped()
 
-                if recipe.sourceURL != nil {
-                    Button { showFullscreen = true } label: {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .padding(8)
-                            .background(.black.opacity(0.6), in: Circle())
-                    }
-                    .padding(10)
+                    // Dim overlay
+                    Color.black.opacity(0.25)
+
+                    // Play button
+                    Image(systemName: "play.circle.fill")
+                        .font(.system(size: 64))
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.5), radius: 8, x: 0, y: 2)
                 }
             }
+            .buttonStyle(.plain)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
     }
 
-    /// Extracts the TikTok video ID, trying two sources in order:
-    /// 1. The source URL path  (works for full tiktok.com/@user/video/ID URLs)
-    /// 2. data-video-id attr in embed_html (works for all URLs incl. short vt.tiktok.com)
-    private func tiktokVideoID() -> String? {
-        // 1. Source URL
-        if let urlString = recipe.sourceURL,
-           let url = URL(string: urlString),
-           url.host?.contains("tiktok.com") == true {
-            let parts = url.pathComponents
-            if let idx = parts.firstIndex(of: "video"), idx + 1 < parts.count {
-                return parts[idx + 1]
-            }
-        }
-        // 2. embed_html: look for data-video-id="7123456789"
-        if let html = recipe.embedHTML,
-           let start = html.range(of: "data-video-id=\"")?.upperBound,
-           let end = html[start...].firstIndex(of: "\"") {
-            return String(html[start..<end])
-        }
-        return nil
+    private var thumbnailPlaceholder: some View {
+        Rectangle()
+            .fill(Color(.systemGray5))
+            .aspectRatio(9.0 / 16.0, contentMode: .fit)
+            .overlay(
+                Image(systemName: "film")
+                    .font(.largeTitle)
+                    .foregroundStyle(.tertiary)
+            )
     }
 }
 
-// MARK: - WKWebView wrapper — loads TikTok's direct iframe player (dark, no card)
+// MARK: - Fullscreen TikTok player (real WKWebView, not Safari)
 
-struct TikTokWebView: UIViewRepresentable {
-    let videoID: String
+struct TikTokFullscreenView: View {
+    let url: URL
+    @Binding var isPresented: Bool
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            TikTokBrowserView(url: url)
+                .ignoresSafeArea()
+
+            Button { isPresented = false } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 34))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, Color(.systemGray2).opacity(0.7))
+                    .shadow(radius: 4)
+            }
+            .padding(.top, 56)
+            .padding(.leading, 16)
+        }
+        .background(.black)
+    }
+}
+
+// MARK: - WKWebView that loads the real TikTok page
+
+struct TikTokBrowserView: UIViewRepresentable {
+    let url: URL
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -197,62 +199,13 @@ struct TikTokWebView: UIViewRepresentable {
         config.mediaTypesRequiringUserActionForPlayback = []
 
         let webView = WKWebView(frame: .zero, configuration: config)
-        webView.scrollView.isScrollEnabled = false
-        webView.isOpaque = true
-        webView.backgroundColor = .black
-        webView.scrollView.backgroundColor = .black
-
-        let html = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
-          <style>
-            * { margin: 0; padding: 0; }
-            html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
-            iframe { width: 100%; height: 100%; border: none; display: block; }
-          </style>
-        </head>
-        <body>
-          <iframe
-            src="https://www.tiktok.com/embed/v2/\(videoID)?autoplay=1&loop=1&music_info=1&description=0"
-            allow="autoplay; fullscreen; picture-in-picture"
-            allowfullscreen>
-          </iframe>
-        </body>
-        </html>
-        """
-
-        webView.loadHTMLString(html, baseURL: URL(string: "https://www.tiktok.com"))
+        // Mobile Safari UA so TikTok serves the mobile web player
+        webView.customUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+        webView.load(URLRequest(url: url))
         return webView
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {}
-}
-
-// MARK: - Fullscreen video (SFSafariViewController)
-
-struct FullscreenVideoView: UIViewControllerRepresentable {
-    let url: URL
-    @Binding var isPresented: Bool
-
-    func makeUIViewController(context: Context) -> SFSafariViewController {
-        let vc = SFSafariViewController(url: url)
-        vc.delegate = context.coordinator
-        return vc
-    }
-
-    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
-
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
-
-    class Coordinator: NSObject, SFSafariViewControllerDelegate {
-        var parent: FullscreenVideoView
-        init(_ parent: FullscreenVideoView) { self.parent = parent }
-        func safariViewControllerDidFinish(_ controller: SFSafariViewController) {
-            parent.isPresented = false
-        }
-    }
 }
 
 // MARK: - Reusable section card
@@ -287,7 +240,6 @@ private struct IngredientDetailRow: View {
                 .padding(.top, 1)
 
             VStack(alignment: .leading, spacing: 2) {
-                // Quantity + canonical name
                 HStack(spacing: 4) {
                     if let qty = ingredient.quantity { Text(qty).fontWeight(.medium) }
                     if let unit = ingredient.unit { Text(unit).foregroundStyle(.secondary) }
@@ -295,19 +247,14 @@ private struct IngredientDetailRow: View {
                 }
                 .font(.subheadline)
 
-                // Raw text (original from caption)
                 if ingredient.rawText.lowercased() != ingredient.canonicalName.lowercased() {
                     Text(ingredient.rawText)
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
 
-                // Notes
                 if let notes = ingredient.notes {
-                    Text(notes)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .italic()
+                    Text(notes).font(.caption).foregroundStyle(.secondary).italic()
                 }
             }
         }
