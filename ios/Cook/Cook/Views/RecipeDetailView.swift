@@ -114,25 +114,25 @@ private struct RecipeDetailContent: View {
 private struct TikTokPlayerSection: View {
     let recipe: RecipeDetail
     @Binding var showFullscreen: Bool
-    @State private var playerHeight: CGFloat = 300
+
+    // Fixed height: portrait 9:16 ratio capped so ingredients stay visible
+    private let playerHeight: CGFloat = 500
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            // Creator
             if let creator = recipe.creatorName {
                 Label(creator, systemImage: "person.circle")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
 
-            // Embedded player or thumbnail fallback
             ZStack(alignment: .bottomTrailing) {
-                if let html = recipe.embedHTML {
-                    TikTokWebView(embedHTML: html, height: $playerHeight)
+                if let videoID = tiktokVideoID(from: recipe.sourceURL) {
+                    // Direct TikTok iframe — dark player, no white card
+                    TikTokWebView(videoID: videoID)
                         .frame(height: playerHeight)
                         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 } else if let urlStr = recipe.sourceURL, let url = URL(string: urlStr) {
-                    // Fallback: link button when no embed HTML
                     Link(destination: url) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -150,11 +150,8 @@ private struct TikTokPlayerSection: View {
                     }
                 }
 
-                // Fullscreen button
                 if recipe.sourceURL != nil {
-                    Button {
-                        showFullscreen = true
-                    } label: {
+                    Button { showFullscreen = true } label: {
                         Image(systemName: "arrow.up.left.and.arrow.down.right")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(.white)
@@ -166,15 +163,25 @@ private struct TikTokPlayerSection: View {
             }
         }
     }
+
+    /// Pulls the numeric video ID out of a TikTok URL.
+    /// e.g. https://www.tiktok.com/@user/video/7123456789012345678 → "7123456789012345678"
+    private func tiktokVideoID(from urlString: String?) -> String? {
+        guard let urlString,
+              let url = URL(string: urlString),
+              url.host?.contains("tiktok.com") == true else { return nil }
+        let parts = url.pathComponents
+        if let idx = parts.firstIndex(of: "video"), idx + 1 < parts.count {
+            return parts[idx + 1]
+        }
+        return nil
+    }
 }
 
-// MARK: - WKWebView wrapper for TikTok embed
+// MARK: - WKWebView wrapper — loads TikTok's direct iframe player (dark, no card)
 
 struct TikTokWebView: UIViewRepresentable {
-    let embedHTML: String
-    @Binding var height: CGFloat
-
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    let videoID: String
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -182,50 +189,37 @@ struct TikTokWebView: UIViewRepresentable {
         config.mediaTypesRequiringUserActionForPlayback = []
 
         let webView = WKWebView(frame: .zero, configuration: config)
-        webView.navigationDelegate = context.coordinator
         webView.scrollView.isScrollEnabled = false
-        webView.isOpaque = false
-        webView.backgroundColor = .clear
-        webView.scrollView.backgroundColor = .clear
+        webView.isOpaque = true
+        webView.backgroundColor = .black
+        webView.scrollView.backgroundColor = .black
 
-        let wrappedHTML = """
+        let html = """
         <!DOCTYPE html>
         <html>
         <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+          <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
           <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { background: #000; display: flex; justify-content: center; align-items: flex-start; }
-            .tiktok-embed { margin: 0 auto !important; }
+            * { margin: 0; padding: 0; }
+            html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+            iframe { width: 100%; height: 100%; border: none; display: block; }
           </style>
         </head>
         <body>
-          \(embedHTML)
+          <iframe
+            src="https://www.tiktok.com/embed/v2/\(videoID)?autoplay=1&music_info=1&description=0"
+            allow="autoplay; fullscreen; picture-in-picture"
+            allowfullscreen>
+          </iframe>
         </body>
         </html>
         """
 
-        webView.loadHTMLString(wrappedHTML, baseURL: URL(string: "https://www.tiktok.com"))
+        webView.loadHTMLString(html, baseURL: URL(string: "https://www.tiktok.com"))
         return webView
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {}
-
-    class Coordinator: NSObject, WKNavigationDelegate {
-        var parent: TikTokWebView
-        init(_ parent: TikTokWebView) { self.parent = parent }
-
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            // Read the content height after the TikTok embed script has run
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                webView.evaluateJavaScript("document.body.scrollHeight") { result, _ in
-                    if let h = result as? CGFloat, h > 100 {
-                        self.parent.height = min(h, 780)
-                    }
-                }
-            }
-        }
-    }
 }
 
 // MARK: - Fullscreen video (SFSafariViewController)
