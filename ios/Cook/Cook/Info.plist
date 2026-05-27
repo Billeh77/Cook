@@ -6,16 +6,16 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSExceptionDomains</key>
+	<key>CFBundleURLTypes</key>
+	<array>
 		<dict>
-			<key>192.168.1.22</key>
-			<dict>
-				<key>NSExceptionAllowsInsecureHTTPLoads</key>
-				<true/>
-			</dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>cook</string>
+			</array>
+			<key>CFBundleURLName</key>
+			<string>com.Emile.Cook</string>
 		</dict>
-	</dict>
+	</array>
 </dict>
 </plist>
