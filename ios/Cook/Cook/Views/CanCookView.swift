@@ -37,7 +37,7 @@ struct CanCookView: View {
     // MARK: - Scroll content
 
     private var scrollContent: some View {
-        ScrollView {
+        ScrollView (showsIndicators: false){
             LazyVStack(alignment: .leading, spacing: 24) {
                 if !canCook.isEmpty {
                     sectionHeader("Ready to cook", icon: "checkmark.circle.fill", color: .green)
@@ -159,13 +159,6 @@ private struct RecipeCard: View {
                         if let mins = item.timeMinutes {
                             TagChip(text: timeLabel(mins), icon: "clock", color: .blue)
                         }
-                        if let servings = item.servings {
-                            TagChip(text: "\(servings) serving\(servings == 1 ? "" : "s")",
-                                    icon: "person.2", color: .purple)
-                        }
-                        if item.isBatchPrep {
-                            TagChip(text: "Batch prep", icon: "tray.full", color: .indigo)
-                        }
                         if let protein = item.proteinLevel, protein == "high" {
                             TagChip(text: "High protein", icon: "bolt.fill", color: .green)
                         }
@@ -200,8 +193,8 @@ private struct RecipeCard: View {
     }
 
     private var hasTags: Bool {
-        item.effort != nil || item.timeMinutes != nil || item.servings != nil
-        || item.isBatchPrep || item.proteinLevel == "high"
+        item.effort != nil || item.timeMinutes != nil
+        || item.proteinLevel == "high"
         || item.calorieLevel != nil || item.proteinSource != nil
     }
 
