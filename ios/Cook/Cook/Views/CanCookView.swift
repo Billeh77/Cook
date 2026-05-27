@@ -159,6 +159,10 @@ private struct RecipeCard: View {
                         if let mins = item.timeMinutes {
                             TagChip(text: timeLabel(mins), icon: "clock", color: .blue)
                         }
+                        if let servings = item.servings {
+                            TagChip(text: "\(servings) serving\(servings == 1 ? "" : "s")",
+                                    icon: "person.2", color: .purple)
+                        }
                         if let protein = item.proteinLevel, protein == "high" {
                             TagChip(text: "High protein", icon: "bolt.fill", color: .green)
                         }
@@ -193,7 +197,7 @@ private struct RecipeCard: View {
     }
 
     private var hasTags: Bool {
-        item.effort != nil || item.timeMinutes != nil
+        item.effort != nil || item.timeMinutes != nil || item.servings != nil
         || item.proteinLevel == "high"
         || item.calorieLevel != nil || item.proteinSource != nil
     }
