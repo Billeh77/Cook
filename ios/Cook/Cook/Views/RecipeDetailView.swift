@@ -105,24 +105,32 @@ private struct VideoThumbnailCard: View {
             }
 
             ZStack(alignment: .bottomTrailing) {
-                // Square thumbnail — scaledToFill so every image looks consistent
-                Group {
-                    if let urlStr = recipe.thumbnailURL, let url = URL(string: urlStr) {
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .success(let img):
-                                img.resizable().scaledToFill()
-                            default:
-                                thumbnailPlaceholder
+                // Rectangle establishes the square FIRST — image fills it via overlay.
+                // This prevents AsyncImage from dictating its own size.
+                Rectangle()
+                    .aspectRatio(1, contentMode: .fit)
+                    .overlay(
+                        Group {
+                            if let urlStr = recipe.thumbnailURL, let url = URL(string: urlStr) {
+                                AsyncImage(url: url) { phase in
+                                    switch phase {
+                                    case .success(let img):
+                                        img.resizable().scaledToFill()
+                                    default:
+                                        Color(.systemGray5)
+                                    }
+                                }
+                            } else {
+                                Color(.systemGray5)
+                                    .overlay(
+                                        Image(systemName: "film")
+                                            .font(.largeTitle)
+                                            .foregroundStyle(.tertiary)
+                                    )
                             }
                         }
-                    } else {
-                        thumbnailPlaceholder
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .aspectRatio(1, contentMode: .fit)   // always a square
-                .clipped()
+                    )
+                    .clipped()
 
                 // Discrete "Watch on …" button — bottom right
                 if let urlStr = recipe.sourceURL, let url = URL(string: urlStr) {
@@ -143,16 +151,6 @@ private struct VideoThumbnailCard: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
-    }
-
-    private var thumbnailPlaceholder: some View {
-        Rectangle()
-            .fill(Color(.systemGray5))
-            .overlay(
-                Image(systemName: "film")
-                    .font(.largeTitle)
-                    .foregroundStyle(.tertiary)
-            )
     }
 
     /// "Watch on TikTok", "Watch on Instagram", etc.
