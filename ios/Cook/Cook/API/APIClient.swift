@@ -8,10 +8,10 @@ enum APIError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidURL:                         return "Invalid URL"
-        case .unauthenticated:                    return "Not signed in"
-        case .serverError(let code, let msg):     return "Server error \(code): \(msg)"
-        case .decodingError(let e):               return "Could not read response: \(e.localizedDescription)"
+        case .invalidURL:                     return "Invalid URL"
+        case .unauthenticated:                return "Not signed in"
+        case .serverError(let code, let msg): return "Server error \(code): \(msg)"
+        case .decodingError(let e):           return "Could not read response: \(e.localizedDescription)"
         }
     }
 }
@@ -25,53 +25,114 @@ final class APIClient {
     // MARK: - Recipes
 
     func getRecipes() async throws -> [RecipeListItem] {
-        let req = try makeRequest(path: "/recipes")
-        return try await send(req, as: [RecipeListItem].self)
+        try await send(makeRequest("/recipes"), as: [RecipeListItem].self)
     }
 
     func getRecipe(id: String) async throws -> RecipeDetail {
-        let req = try makeRequest(path: "/recipes/\(id)")
-        return try await send(req, as: RecipeDetail.self)
+        try await send(makeRequest("/recipes/\(id)"), as: RecipeDetail.self)
     }
 
     func deleteRecipe(id: String) async throws {
-        var req = try makeRequest(path: "/recipes/\(id)")
+        var req = makeRequest("/recipes/\(id)")
         req.httpMethod = "DELETE"
-        let (_, response) = try await URLSession.shared.data(for: req)
-        if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
-            throw APIError.serverError(http.statusCode, "Delete failed")
-        }
+        _ = try await perform(req)
     }
 
     // MARK: - Ingest
 
     func ingestLink(url: String) async throws -> IngestResponse {
-        var req = try makeRequest(path: "/ingest/link")
+        var req = makeRequest("/ingest/link")
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.timeoutInterval = 60  // LLM extraction takes a moment
+        req.timeoutInterval = 60
         req.httpBody = try JSONEncoder().encode(["url": url])
         return try await send(req, as: IngestResponse.self)
     }
 
+    // MARK: - Inventory
+
+    func getInventory() async throws -> [InventoryItem] {
+        try await send(makeRequest("/inventory"), as: [InventoryItem].self)
+    }
+
+    func addInventoryItem(name: String, status: String = "in_stock") async throws -> InventoryItem {
+        var req = makeRequest("/inventory")
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONEncoder().encode(["canonical_name": name, "status": status])
+        return try await send(req, as: InventoryItem.self)
+    }
+
+    func updateInventoryItem(id: String, status: String) async throws -> InventoryItem {
+        var req = makeRequest("/inventory/\(id)")
+        req.httpMethod = "PATCH"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONEncoder().encode(["status": status])
+        return try await send(req, as: InventoryItem.self)
+    }
+
+    func deleteInventoryItem(id: String) async throws {
+        var req = makeRequest("/inventory/\(id)")
+        req.httpMethod = "DELETE"
+        _ = try await perform(req)
+    }
+
+    // MARK: - Grocery list
+
+    func getGroceryList() async throws -> [GroceryListItem] {
+        try await send(makeRequest("/grocery-list"), as: [GroceryListItem].self)
+    }
+
+    func generateGroceryList(recipeIds: [String]) async throws -> [GroceryListItem] {
+        var req = makeRequest("/grocery-list/generate")
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONEncoder().encode(["recipe_ids": recipeIds])
+        return try await send(req, as: [GroceryListItem].self)
+    }
+
+    func checkGroceryItem(id: String, checked: Bool, updateInventory: Bool = true) async throws -> GroceryListItem {
+        var req = makeRequest("/grocery-list/items/\(id)/check")
+        req.httpMethod = "PATCH"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONEncoder().encode(["checked": checked, "update_inventory": updateInventory])
+        return try await send(req, as: GroceryListItem.self)
+    }
+
+    func deleteGroceryItem(id: String) async throws {
+        var req = makeRequest("/grocery-list/items/\(id)")
+        req.httpMethod = "DELETE"
+        _ = try await perform(req)
+    }
+
+    func clearCheckedGroceryItems() async throws {
+        var req = makeRequest("/grocery-list")
+        req.httpMethod = "DELETE"
+        _ = try await perform(req)
+    }
+
     // MARK: - Helpers
 
-    private func makeRequest(path: String) throws -> URLRequest {
-        guard let url = URL(string: base + path) else { throw APIError.invalidURL }
+    private func makeRequest(_ path: String) -> URLRequest {
+        let url = URL(string: base + path)!
         var req = URLRequest(url: url)
-        // Attach Supabase JWT — token is stored in the shared App Group by AuthManager
         if let token = AuthManager.shared.accessToken {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         return req
     }
 
-    private func send<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {
+    private func perform(_ request: URLRequest) async throws -> Data {
         let (data, response) = try await URLSession.shared.data(for: request)
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
             let body = String(data: data, encoding: .utf8) ?? ""
             throw APIError.serverError(http.statusCode, body)
         }
+        return data
+    }
+
+    private func send<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {
+        let data = try await perform(request)
         do {
             return try JSONDecoder().decode(T.self, from: data)
         } catch {
