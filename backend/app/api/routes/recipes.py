@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.db import get_session
-from app.models import Recipe, Ingredient
+from app.models import Recipe, Ingredient, GroceryListItem
 from app.api.dependencies import get_current_user
 from app.services.inventory import find_missing
 
@@ -197,6 +197,8 @@ def delete_recipe(
     if not recipe or recipe.user_id != user_id:
         raise HTTPException(status_code=404, detail="Recipe not found")
 
+    for item in session.exec(select(GroceryListItem).where(GroceryListItem.recipe_id == uid)).all():
+        session.delete(item)
     for ing in session.exec(select(Ingredient).where(Ingredient.recipe_id == uid)).all():
         session.delete(ing)
     session.delete(recipe)
