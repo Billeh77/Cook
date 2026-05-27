@@ -13,6 +13,7 @@ class Recipe(SQLModel, table=True):
     __tablename__ = "recipes"
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: str = Field(index=True)  # Supabase auth UUID
     dish_name: str
     creator_name: Optional[str] = None
     source_url: str
@@ -42,6 +43,7 @@ class InventoryItem(SQLModel, table=True):
     __tablename__ = "inventory_items"
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: str = Field(index=True)  # Supabase auth UUID
     canonical_name: str = Field(index=True)
     status: str = "in_stock"  # in_stock | low | out_of_stock | always_have
     updated_at: datetime = Field(default_factory=_now)
@@ -51,6 +53,7 @@ class GroceryListItem(SQLModel, table=True):
     __tablename__ = "grocery_list_items"
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: str = Field(index=True)  # Supabase auth UUID
     canonical_name: str
     category: str = "other"
     checked: bool = False

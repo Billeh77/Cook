@@ -1,9 +1,12 @@
+import uuid as _uuid
+from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.db import get_session
 from app.models import InventoryItem
+from app.api.dependencies import get_current_user
 
 router = APIRouter()
 
@@ -27,91 +30,97 @@ class InventoryItemOut(BaseModel):
 
 
 @router.get("", response_model=list[InventoryItemOut])
-def list_inventory(session: Session = Depends(get_session)):
-    items = session.exec(select(InventoryItem).order_by(InventoryItem.canonical_name)).all()
-    return [
-        InventoryItemOut(
-            id=str(i.id),
-            canonical_name=i.canonical_name,
-            status=i.status,
-            updated_at=i.updated_at.isoformat(),
-        )
-        for i in items
-    ]
+def list_inventory(
+    session: Session = Depends(get_session),
+    user_id: str = Depends(get_current_user),
+):
+    items = session.exec(
+        select(InventoryItem)
+        .where(InventoryItem.user_id == user_id)
+        .order_by(InventoryItem.canonical_name)
+    ).all()
+    return [_out(i) for i in items]
 
 
 @router.post("", response_model=InventoryItemOut, status_code=201)
-def add_inventory_item(body: InventoryItemCreate, session: Session = Depends(get_session)):
+def add_inventory_item(
+    body: InventoryItemCreate,
+    session: Session = Depends(get_session),
+    user_id: str = Depends(get_current_user),
+):
     if body.status not in VALID_STATUSES:
-        raise HTTPException(status_code=400, detail=f"Invalid status. Choose from: {VALID_STATUSES}")
+        raise HTTPException(status_code=400, detail=f"Invalid status. Choose: {VALID_STATUSES}")
 
-    # Upsert by canonical_name
+    name = body.canonical_name.lower().strip()
     existing = session.exec(
-        select(InventoryItem).where(InventoryItem.canonical_name == body.canonical_name.lower())
+        select(InventoryItem)
+        .where(InventoryItem.user_id == user_id, InventoryItem.canonical_name == name)
     ).first()
 
     if existing:
         existing.status = body.status
-        from datetime import datetime, timezone
         existing.updated_at = datetime.now(timezone.utc)
         session.add(existing)
         session.commit()
         session.refresh(existing)
-        item = existing
-    else:
-        item = InventoryItem(canonical_name=body.canonical_name.lower(), status=body.status)
-        session.add(item)
-        session.commit()
-        session.refresh(item)
+        return _out(existing)
 
-    return InventoryItemOut(
-        id=str(item.id),
-        canonical_name=item.canonical_name,
-        status=item.status,
-        updated_at=item.updated_at.isoformat(),
-    )
+    item = InventoryItem(user_id=user_id, canonical_name=name, status=body.status)
+    session.add(item)
+    session.commit()
+    session.refresh(item)
+    return _out(item)
 
 
 @router.patch("/{item_id}", response_model=InventoryItemOut)
-def update_inventory_item(item_id: str, body: InventoryItemUpdate, session: Session = Depends(get_session)):
-    import uuid
+def update_inventory_item(
+    item_id: str,
+    body: InventoryItemUpdate,
+    session: Session = Depends(get_session),
+    user_id: str = Depends(get_current_user),
+):
     if body.status not in VALID_STATUSES:
-        raise HTTPException(status_code=400, detail=f"Invalid status. Choose from: {VALID_STATUSES}")
+        raise HTTPException(status_code=400, detail=f"Invalid status. Choose: {VALID_STATUSES}")
     try:
-        uid = uuid.UUID(item_id)
+        uid = _uuid.UUID(item_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid item ID")
 
     item = session.get(InventoryItem, uid)
-    if not item:
-        raise HTTPException(status_code=404, detail="Inventory item not found")
+    if not item or item.user_id != user_id:
+        raise HTTPException(status_code=404, detail="Item not found")
 
     item.status = body.status
-    from datetime import datetime, timezone
     item.updated_at = datetime.now(timezone.utc)
     session.add(item)
     session.commit()
     session.refresh(item)
+    return _out(item)
 
+
+@router.delete("/{item_id}", status_code=204)
+def delete_inventory_item(
+    item_id: str,
+    session: Session = Depends(get_session),
+    user_id: str = Depends(get_current_user),
+):
+    try:
+        uid = _uuid.UUID(item_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid item ID")
+
+    item = session.get(InventoryItem, uid)
+    if not item or item.user_id != user_id:
+        raise HTTPException(status_code=404, detail="Item not found")
+
+    session.delete(item)
+    session.commit()
+
+
+def _out(item: InventoryItem) -> InventoryItemOut:
     return InventoryItemOut(
         id=str(item.id),
         canonical_name=item.canonical_name,
         status=item.status,
         updated_at=item.updated_at.isoformat(),
     )
-
-
-@router.delete("/{item_id}", status_code=204)
-def delete_inventory_item(item_id: str, session: Session = Depends(get_session)):
-    import uuid
-    try:
-        uid = uuid.UUID(item_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid item ID")
-
-    item = session.get(InventoryItem, uid)
-    if not item:
-        raise HTTPException(status_code=404, detail="Inventory item not found")
-
-    session.delete(item)
-    session.commit()

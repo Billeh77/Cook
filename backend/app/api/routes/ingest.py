@@ -4,6 +4,7 @@ from sqlmodel import Session
 
 from app.db import get_session
 from app.models import Recipe, Ingredient
+from app.api.dependencies import get_current_user
 from app.services.ingestion.platform_detector import detect_platform, UnsupportedPlatformError
 from app.services.ingestion.tiktok_oembed import fetch_tiktok_oembed
 from app.services.ai.recipe_extractor import extract_recipe
@@ -39,7 +40,11 @@ class IngestLinkResponse(BaseModel):
 
 
 @router.post("/link", response_model=IngestLinkResponse)
-async def ingest_link(request: IngestLinkRequest, session: Session = Depends(get_session)):
+async def ingest_link(
+    request: IngestLinkRequest,
+    session: Session = Depends(get_session),
+    user_id: str = Depends(get_current_user),
+):
     # 1. Detect platform
     try:
         platform = detect_platform(request.url)
@@ -59,7 +64,7 @@ async def ingest_link(request: IngestLinkRequest, session: Session = Depends(get
             source_url=request.url,
         )
 
-    # 3. Single LLM call — extract dish + normalize all ingredients in one shot
+    # 3. Single LLM call — extract + normalize in one shot
     extraction = await extract_recipe(raw.caption_text)
 
     if extraction.confidence < 0.3:
@@ -73,6 +78,7 @@ async def ingest_link(request: IngestLinkRequest, session: Session = Depends(get
 
     # 4. Save recipe
     db_recipe = Recipe(
+        user_id=user_id,
         dish_name=extraction.dish_name or "Unknown Dish",
         creator_name=raw.creator_name,
         source_url=request.url,
@@ -86,7 +92,7 @@ async def ingest_link(request: IngestLinkRequest, session: Session = Depends(get
     session.add(db_recipe)
     session.flush()
 
-    # 5. Save ingredients — order is guaranteed because it's one LLM response
+    # 5. Save ingredients
     db_ingredients: list[Ingredient] = []
     for ing in extraction.ingredients:
         db_ing = Ingredient(
