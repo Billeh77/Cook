@@ -55,15 +55,59 @@ struct RecipeDetail: Codable, Identifiable {
     let createdAt: String
     let steps: [String]
     let ingredients: [IngredientResponse]
+    let servings: Int?
+    let effort: String?
+    let timeMinutes: Int?
+    let isBatchPrep: Bool
+    let proteinLevel: String?
 
     enum CodingKeys: String, CodingKey {
         case id, platform, confidence, steps, ingredients
-        case dishName    = "dish_name"
-        case creatorName = "creator_name"
-        case sourceURL   = "source_url"
+        case dishName     = "dish_name"
+        case creatorName  = "creator_name"
+        case sourceURL    = "source_url"
         case thumbnailURL = "thumbnail_url"
-        case embedHTML   = "embed_html"
-        case createdAt   = "created_at"
+        case embedHTML    = "embed_html"
+        case createdAt    = "created_at"
+        case servings, effort
+        case timeMinutes  = "time_minutes"
+        case isBatchPrep  = "is_batch_prep"
+        case proteinLevel = "protein_level"
+    }
+}
+
+// MARK: - Cookability (home screen)
+
+struct CookabilityItem: Codable, Identifiable {
+    let id: String
+    let dishName: String
+    let creatorName: String?
+    let sourceURL: String?
+    let thumbnailURL: String?
+    let platform: String
+    let ingredientCount: Int
+    let createdAt: String
+    let servings: Int?
+    let effort: String?
+    let timeMinutes: Int?
+    let isBatchPrep: Bool
+    let proteinLevel: String?
+    let missingCount: Int
+    let missingIngredients: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case id, platform, servings, effort
+        case dishName          = "dish_name"
+        case creatorName       = "creator_name"
+        case sourceURL         = "source_url"
+        case thumbnailURL      = "thumbnail_url"
+        case ingredientCount   = "ingredient_count"
+        case createdAt         = "created_at"
+        case timeMinutes       = "time_minutes"
+        case isBatchPrep       = "is_batch_prep"
+        case proteinLevel      = "protein_level"
+        case missingCount      = "missing_count"
+        case missingIngredients = "missing_ingredients"
     }
 }
 

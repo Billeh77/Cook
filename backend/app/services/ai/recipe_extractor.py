@@ -27,8 +27,14 @@ class ExtractedIngredient(BaseModel):
 class RecipeExtraction(BaseModel):
     dish_name: str | None = None
     ingredients: list[ExtractedIngredient] = []
-    steps: list[str] = []   # cooking instructions if present in caption; empty list if not
+    steps: list[str] = []       # cooking instructions if present; empty list if not
     confidence: float = 0.0
+    # Tags — inferred from recipe content
+    servings: int | None = None             # number of servings the recipe makes
+    effort: str | None = None              # "easy" | "medium" | "hard"
+    time_minutes: int | None = None        # total estimated time in minutes
+    is_batch_prep: bool = False            # true if recipe is a weekly batch / meal-prep
+    protein_level: str | None = None      # "high" | "medium" | "low"
 
 
 # ── Prompt ────────────────────────────────────────────────────────────────────
@@ -74,6 +80,16 @@ STEPS rules:
 - Preserve the original order
 - If the caption has no instructions, return an empty array []
 
+TAGS — infer these from the recipe content:
+- servings: integer — how many people / portions the recipe makes (e.g. 1, 2, 4, 6). \
+  Clues: "serves 4", "for 2", large quantities of protein, "whole tray", "weekly prep"
+- effort: "easy" | "medium" | "hard" — based on technique complexity and number of steps
+- time_minutes: integer — total estimated time including prep and cook (rough estimate is fine)
+- is_batch_prep: true if the recipe is clearly intended for weekly meal prep or makes \
+  large quantities meant to last several days (e.g. big batch of sauce, full tray of protein)
+- protein_level: "high" if main protein is prominent (large cuts of meat, many eggs, legumes \
+  as main); "low" if mostly vegetables, grains, or light dishes; "medium" otherwise
+
 CONFIDENCE:
 - 1.0 = full recipe with quantities and most ingredients clearly listed
 - 0.7 = recipe found but some ingredients vague or quantities missing
@@ -87,6 +103,11 @@ SCHEMA = """\
 {
   "dish_name": "string or null",
   "confidence": 0.0,
+  "servings": null,
+  "effort": "easy|medium|hard or null",
+  "time_minutes": null,
+  "is_batch_prep": false,
+  "protein_level": "high|medium|low or null",
   "ingredients": [
     {
       "raw_text": "exact text from caption including quantity and descriptors",

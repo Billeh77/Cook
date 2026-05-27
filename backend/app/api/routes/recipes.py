@@ -6,9 +6,12 @@ from sqlmodel import Session, select
 from app.db import get_session
 from app.models import Recipe, Ingredient
 from app.api.dependencies import get_current_user
+from app.services.inventory import find_missing
 
 router = APIRouter()
 
+
+# ── Response models ────────────────────────────────────────────────────────────
 
 class IngredientOut(BaseModel):
     id: str
@@ -32,6 +35,11 @@ class RecipeOut(BaseModel):
     created_at: str
     steps: list[str] = []
     ingredients: list[IngredientOut] = []
+    servings: int | None = None
+    effort: str | None = None
+    time_minutes: int | None = None
+    is_batch_prep: bool = False
+    protein_level: str | None = None
 
 
 class RecipeListItem(BaseModel):
@@ -43,7 +51,32 @@ class RecipeListItem(BaseModel):
     platform: str
     ingredient_count: int
     created_at: str
+    servings: int | None = None
+    effort: str | None = None
+    time_minutes: int | None = None
+    is_batch_prep: bool = False
+    protein_level: str | None = None
 
+
+class CookabilityItem(BaseModel):
+    id: str
+    dish_name: str
+    creator_name: str | None
+    source_url: str
+    thumbnail_url: str | None
+    platform: str
+    ingredient_count: int
+    created_at: str
+    servings: int | None = None
+    effort: str | None = None
+    time_minutes: int | None = None
+    is_batch_prep: bool = False
+    protein_level: str | None = None
+    missing_count: int = 0
+    missing_ingredients: list[str] = []
+
+
+# ── Routes ─────────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=list[RecipeListItem])
 def list_recipes(
@@ -53,20 +86,48 @@ def list_recipes(
     recipes = session.exec(
         select(Recipe).where(Recipe.user_id == user_id).order_by(Recipe.created_at.desc())
     ).all()
+    result = []
+    for r in recipes:
+        count = len(session.exec(select(Ingredient).where(Ingredient.recipe_id == r.id)).all())
+        result.append(_list_item(r, count))
+    return result
+
+
+@router.get("/cookability", response_model=list[CookabilityItem])
+def get_cookability(
+    session: Session = Depends(get_session),
+    user_id: str = Depends(get_current_user),
+):
+    """All recipes sorted by ascending missing-ingredient count."""
+    recipes = session.exec(
+        select(Recipe).where(Recipe.user_id == user_id).order_by(Recipe.created_at.desc())
+    ).all()
 
     result = []
     for r in recipes:
-        count = session.exec(select(Ingredient).where(Ingredient.recipe_id == r.id)).all()
-        result.append(RecipeListItem(
+        ingredients = session.exec(
+            select(Ingredient).where(Ingredient.recipe_id == r.id)
+        ).all()
+        missing = find_missing([i.canonical_name for i in ingredients], session, user_id)
+        result.append(CookabilityItem(
             id=str(r.id),
             dish_name=r.dish_name,
             creator_name=r.creator_name,
             source_url=r.source_url,
             thumbnail_url=r.thumbnail_url,
             platform=r.platform,
-            ingredient_count=len(count),
+            ingredient_count=len(ingredients),
             created_at=r.created_at.isoformat(),
+            servings=r.servings,
+            effort=r.effort,
+            time_minutes=r.time_minutes,
+            is_batch_prep=r.is_batch_prep or False,
+            protein_level=r.protein_level,
+            missing_count=len(missing),
+            missing_ingredients=missing,
         ))
+
+    result.sort(key=lambda x: x.missing_count)
     return result
 
 
@@ -100,16 +161,16 @@ def get_recipe(
         steps=recipe.steps or [],
         ingredients=[
             IngredientOut(
-                id=str(i.id),
-                raw_text=i.raw_text,
-                canonical_name=i.canonical_name,
-                quantity=i.quantity,
-                unit=i.unit,
-                notes=i.notes,
-                category=i.category,
+                id=str(i.id), raw_text=i.raw_text, canonical_name=i.canonical_name,
+                quantity=i.quantity, unit=i.unit, notes=i.notes, category=i.category,
             )
             for i in ingredients
         ],
+        servings=recipe.servings,
+        effort=recipe.effort,
+        time_minutes=recipe.time_minutes,
+        is_batch_prep=recipe.is_batch_prep or False,
+        protein_level=recipe.protein_level,
     )
 
 
@@ -132,3 +193,16 @@ def delete_recipe(
         session.delete(ing)
     session.delete(recipe)
     session.commit()
+
+
+# ── Helper ─────────────────────────────────────────────────────────────────────
+
+def _list_item(r: Recipe, ingredient_count: int) -> RecipeListItem:
+    return RecipeListItem(
+        id=str(r.id), dish_name=r.dish_name, creator_name=r.creator_name,
+        source_url=r.source_url, thumbnail_url=r.thumbnail_url,
+        platform=r.platform, ingredient_count=ingredient_count,
+        created_at=r.created_at.isoformat(),
+        servings=r.servings, effort=r.effort, time_minutes=r.time_minutes,
+        is_batch_prep=r.is_batch_prep or False, protein_level=r.protein_level,
+    )

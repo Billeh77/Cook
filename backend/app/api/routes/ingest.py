@@ -88,6 +88,11 @@ async def ingest_link(
         raw_caption=raw.caption_text,
         steps=extraction.steps or [],
         confidence=extraction.confidence,
+        servings=extraction.servings,
+        effort=extraction.effort,
+        time_minutes=extraction.time_minutes,
+        is_batch_prep=extraction.is_batch_prep,
+        protein_level=extraction.protein_level,
     )
     session.add(db_recipe)
     session.flush()

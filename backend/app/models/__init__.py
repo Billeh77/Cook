@@ -24,6 +24,12 @@ class Recipe(SQLModel, table=True):
     steps: Optional[List[str]] = Field(default=None, sa_column=Column(JSON, nullable=True))
     confidence: float = 0.0
     created_at: datetime = Field(default_factory=_now)
+    # Recipe tags — populated by LLM at ingest time, null for older recipes
+    servings: Optional[int] = None
+    effort: Optional[str] = None          # "easy" | "medium" | "hard"
+    time_minutes: Optional[int] = None
+    is_batch_prep: bool = False
+    protein_level: Optional[str] = None   # "high" | "medium" | "low"
 
 
 class Ingredient(SQLModel, table=True):

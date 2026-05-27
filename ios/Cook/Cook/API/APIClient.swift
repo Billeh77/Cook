@@ -49,6 +49,10 @@ final class APIClient {
         return try await send(req, as: IngestResponse.self)
     }
 
+    func getCookability() async throws -> [CookabilityItem] {
+        try await send(makeRequest("/recipes/cookability"), as: [CookabilityItem].self)
+    }
+
     // MARK: - Inventory
 
     func getInventory() async throws -> [InventoryItem] {
