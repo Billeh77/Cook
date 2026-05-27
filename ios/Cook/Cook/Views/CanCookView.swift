@@ -45,15 +45,18 @@ struct CanCookView: View {
                 }
 
                 if !almostThere.isEmpty {
+                    Divider()
                     sectionHeader("Almost there", icon: "circle.dotted", color: .orange)
                     Text("Missing 1–2 ingredients")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .padding(.horizontal)
+                        .padding(.top, -20)
                     cardGrid(almostThere)
                 }
 
                 if !needMore.isEmpty {
+                    Divider()
                     sectionHeader("Need more ingredients", icon: "cart.badge.plus", color: .secondary)
                     cardGrid(needMore)
                 }
@@ -140,39 +143,40 @@ private struct RecipeCard: View {
 
             // Info panel
             VStack(alignment: .leading, spacing: 8) {
+                // Title — always reserves 2-line height so cards stay uniform
                 Text(item.dishName)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(2)
+                    .frame(maxWidth: .infinity, minHeight: 40, alignment: .topLeading)
                     .foregroundStyle(.primary)
 
-                // Tag chips
+                // Tag chips — wrapping flow, no scroll
                 if hasTags {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 6) {
-                            if let effort = item.effort {
-                                TagChip(effortTag: effort)
-                            }
-                            if let mins = item.timeMinutes {
-                                TagChip(text: timeLabel(mins), icon: "clock", color: .blue)
-                            }
-                            if let servings = item.servings {
-                                TagChip(text: "\(servings) serving\(servings == 1 ? "" : "s")",
-                                        icon: "person.2", color: .purple)
-                            }
-                            if item.isBatchPrep {
-                                TagChip(text: "Batch prep", icon: "tray.full", color: .indigo)
-                            }
-                            if let protein = item.proteinLevel, protein == "high" {
-                                TagChip(text: "High protein", icon: "bolt.fill", color: .green)
-                            }
-                            if let cal = item.calorieLevel {
-                                TagChip(calorieTag: cal)
-                            }
-                            if let src = item.proteinSource {
-                                TagChip(proteinSourceTag: src)
-                            }
+                    TagFlow(spacing: 5) {
+                        if let effort = item.effort {
+                            TagChip(effortTag: effort)
+                        }
+                        if let mins = item.timeMinutes {
+                            TagChip(text: timeLabel(mins), icon: "clock", color: .blue)
+                        }
+                        if let servings = item.servings {
+                            TagChip(text: "\(servings) serving\(servings == 1 ? "" : "s")",
+                                    icon: "person.2", color: .purple)
+                        }
+                        if item.isBatchPrep {
+                            TagChip(text: "Batch prep", icon: "tray.full", color: .indigo)
+                        }
+                        if let protein = item.proteinLevel, protein == "high" {
+                            TagChip(text: "High protein", icon: "bolt.fill", color: .green)
+                        }
+                        if let cal = item.calorieLevel {
+                            TagChip(calorieTag: cal)
+                        }
+                        if let src = item.proteinSource {
+                            TagChip(proteinSourceTag: src)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
                 // Missing ingredients warning
@@ -266,5 +270,45 @@ private struct TagChip: View {
         .padding(.horizontal, 7)
         .padding(.vertical, 4)
         .background(color.opacity(0.12), in: Capsule())
+    }
+}
+
+// MARK: - Wrapping flow layout (iOS 16+)
+
+private struct TagFlow: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        layout(subviews: subviews, in: proposal.replacingUnspecifiedDimensions().width).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = layout(subviews: subviews, in: bounds.width)
+        for (index, frame) in result.frames.enumerated() {
+            subviews[index].place(
+                at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                proposal: .unspecified
+            )
+        }
+    }
+
+    private func layout(subviews: Subviews, in width: CGFloat) -> (frames: [CGRect], size: CGSize) {
+        var frames: [CGRect] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+
+        for subview in subviews {
+            let sz = subview.sizeThatFits(.unspecified)
+            if x + sz.width > width, x > 0 {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            frames.append(CGRect(origin: CGPoint(x: x, y: y), size: sz))
+            x += sz.width + spacing
+            rowHeight = max(rowHeight, sz.height)
+        }
+        return (frames, CGSize(width: width, height: y + rowHeight))
     }
 }
