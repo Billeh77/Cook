@@ -4,6 +4,7 @@ struct RecipesListView: View {
     @State private var recipes: [RecipeListItem] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var deleteError: String?
 
     var body: some View {
         NavigationStack {
@@ -45,8 +46,17 @@ struct RecipesListView: View {
                 }
             }
             .refreshable { loadRecipes() }
+            .alert("Delete failed", isPresented: Binding(
+                get: { deleteError != nil },
+                set: { if !$0 { deleteError = nil } }
+            )) {
+                Button("OK", role: .cancel) { deleteError = nil }
+            } message: {
+                Text(deleteError ?? "")
+            }
         }
         .task { loadRecipes() }
+        .onAppear { loadRecipes() }
     }
 
     private func loadRecipes() {
@@ -73,7 +83,15 @@ struct RecipesListView: View {
         recipes.remove(atOffsets: offsets)
         Task {
             for recipe in toDelete {
-                try? await APIClient.shared.deleteRecipe(id: recipe.id)
+                do {
+                    try await APIClient.shared.deleteRecipe(id: recipe.id)
+                } catch {
+                    // Roll back: put the recipe back and show the error
+                    await MainActor.run {
+                        recipes.insert(recipe, at: 0)
+                        deleteError = error.localizedDescription
+                    }
+                }
             }
         }
     }

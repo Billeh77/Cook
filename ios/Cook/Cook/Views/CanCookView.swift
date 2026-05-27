@@ -30,6 +30,7 @@ struct CanCookView: View {
             }
             .refreshable { await load() }
             .task { await load() }
+            .onAppear { Task { await load() } }
         }
     }
 
