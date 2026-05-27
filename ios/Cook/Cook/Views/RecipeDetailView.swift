@@ -115,9 +115,6 @@ private struct TikTokPlayerSection: View {
     let recipe: RecipeDetail
     @Binding var showFullscreen: Bool
 
-    // Fixed height: portrait 9:16 ratio capped so ingredients stay visible
-    private let playerHeight: CGFloat = 500
-
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let creator = recipe.creatorName {
@@ -128,9 +125,11 @@ private struct TikTokPlayerSection: View {
 
             ZStack(alignment: .bottomTrailing) {
                 if let videoID = tiktokVideoID() {
-                    // Direct TikTok iframe — dark player, no white card
+                    // TikTok embed/v2 has an intrinsic 325×578 ratio.
+                    // aspectRatio derives the exact height from the container width
+                    // so nothing is clipped and nothing scrolls inside the view.
                     TikTokWebView(videoID: videoID)
-                        .frame(height: playerHeight)
+                        .aspectRatio(325.0 / 578.0, contentMode: .fit)
                         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 } else if let urlStr = recipe.sourceURL, let url = URL(string: urlStr) {
                     Link(destination: url) {
