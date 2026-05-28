@@ -195,7 +195,7 @@ struct VerticalRecipeCard: View {
                     .overlay(thumbnailContent)
                     .clipped()
 
-                VStack(spacing: 10) {
+                HStack(spacing: 10) {
                     CardActionButton(
                         systemImage: isFavorited ? "heart.fill" : "heart",
                         color: isFavorited ? .red : .white
