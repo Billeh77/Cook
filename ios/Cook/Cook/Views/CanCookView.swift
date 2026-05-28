@@ -3,20 +3,51 @@ import SwiftUI
 struct CanCookView: View {
     @State private var items: [CookabilityItem] = []
     @State private var isLoading = false
+    @State private var selectedTab = 0
 
-    private var canCook:   [CookabilityItem] { items.filter { $0.missingCount == 0 } }
-    private var almostThere: [CookabilityItem] { items.filter { $0.missingCount > 0 && $0.missingCount <= 2 } }
-    private var needMore:  [CookabilityItem] { items.filter { $0.missingCount > 2 } }
+    private var canCook:    [CookabilityItem] { items.filter { $0.missingCount == 0 } }
+    private var almostThere:[CookabilityItem] { items.filter { $0.missingCount > 0 && $0.missingCount <= 2 } }
+    private var needMore:   [CookabilityItem] { items.filter { $0.missingCount > 2 } }
+
+    private let tabTitles = ["Can Cook", "Almost There", "Need More"]
 
     var body: some View {
         NavigationStack {
-            Group {
+            VStack(spacing: 0) {
+                topTabBar
+                Divider()
+
                 if isLoading && items.isEmpty {
+                    Spacer()
                     ProgressView("Checking your pantry…").tint(.orange)
-                } else if items.isEmpty {
-                    emptyState
+                    Spacer()
                 } else {
-                    scrollContent
+                    TabView(selection: $selectedTab) {
+                        recipePage(
+                            canCook,
+                            emptyIcon: "flame",
+                            emptyTitle: "Nothing ready yet",
+                            emptyMessage: "Share a cooking video from TikTok or Instagram to get started."
+                        )
+                        .tag(0)
+
+                        recipePage(
+                            almostThere,
+                            emptyIcon: "circle.dotted",
+                            emptyTitle: "Nothing close",
+                            emptyMessage: "Stock your pantry and save more recipes to see what's almost ready."
+                        )
+                        .tag(1)
+
+                        recipePage(
+                            needMore,
+                            emptyIcon: "cart.badge.plus",
+                            emptyTitle: "No recipes here",
+                            emptyMessage: "Save more recipes to populate this list."
+                        )
+                        .tag(2)
+                    }
+                    .tabViewStyle(.page(indexDisplayMode: .never))
                 }
             }
             .navigationTitle("Cook")
@@ -28,79 +59,85 @@ struct CanCookView: View {
                     .tint(.orange)
                 }
             }
-            .refreshable { await load() }
             .task { await load() }
             .onAppear { Task { await load() } }
         }
     }
 
-    // MARK: - Scroll content
+    // MARK: - Top tab bar
 
-    private var scrollContent: some View {
-        ScrollView (showsIndicators: false){
-            LazyVStack(alignment: .leading, spacing: 24) {
-                if !canCook.isEmpty {
-                    sectionHeader("Ready to cook", icon: "checkmark.circle.fill", color: .green)
-                    cardGrid(canCook)
+    private var topTabBar: some View {
+        HStack(spacing: 0) {
+            ForEach(0..<3, id: \.self) { i in
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { selectedTab = i }
+                } label: {
+                    VStack(spacing: 6) {
+                        Text(tabTitles[i])
+                            .font(.subheadline.weight(selectedTab == i ? .semibold : .regular))
+                            .foregroundStyle(selectedTab == i ? .primary : .secondary)
+                        Rectangle()
+                            .frame(height: 2)
+                            .foregroundStyle(selectedTab == i ? Color.orange : Color.clear)
+                            .animation(.easeInOut(duration: 0.2), value: selectedTab)
+                    }
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity)
                 }
-
-                if !almostThere.isEmpty {
-                    Divider()
-                    sectionHeader("Almost there", icon: "circle.dotted", color: .orange)
-                    Text("Missing 1–2 ingredients")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal)
-                        .padding(.top, -20)
-                    cardGrid(almostThere)
-                }
-
-                if !needMore.isEmpty {
-                    Divider()
-                    sectionHeader("Need more ingredients", icon: "cart.badge.plus", color: .secondary)
-                    cardGrid(needMore)
-                }
+                .buttonStyle(.plain)
             }
-            .padding(.vertical)
         }
     }
 
-    private func sectionHeader(_ title: String, icon: String, color: Color) -> some View {
-        Label(title, systemImage: icon)
-            .font(.title3.bold())
-            .foregroundStyle(color)
-            .padding(.horizontal)
-    }
+    // MARK: - Recipe page
 
-    private func cardGrid(_ items: [CookabilityItem]) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: 14) {
-                ForEach(items) { item in
-                    NavigationLink(destination: RecipeDetailView(recipeId: item.id, recipeTitle: item.dishName)) {
-                        RecipeCard(item: item)
+    private func recipePage(
+        _ recipes: [CookabilityItem],
+        emptyIcon: String,
+        emptyTitle: String,
+        emptyMessage: String
+    ) -> some View {
+        Group {
+            if recipes.isEmpty {
+                emptyState(icon: emptyIcon, title: emptyTitle, message: emptyMessage)
+            } else {
+                ScrollView(showsIndicators: false) {
+                    LazyVStack(spacing: 16) {
+                        ForEach(recipes) { item in
+                            NavigationLink(destination: RecipeDetailView(
+                                recipeId: item.id,
+                                recipeTitle: item.dishName,
+                                missingIngredients: item.missingIngredients
+                            )) {
+                                VerticalRecipeCard(item: item)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-                    .buttonStyle(.plain)
+                    .padding(16)
                 }
+                .refreshable { await load() }
             }
-            .padding(.horizontal)
         }
     }
 
     // MARK: - Empty state
 
-    private var emptyState: some View {
+    private func emptyState(icon: String, title: String, message: String) -> some View {
         VStack(spacing: 16) {
-            Image(systemName: "flame")
+            Spacer()
+            Image(systemName: icon)
                 .font(.system(size: 52))
                 .foregroundStyle(.orange.opacity(0.4))
-            Text("Nothing saved yet")
-                .font(.headline)
-            Text("Share cooking videos using the Share button in TikTok.\nThey'll appear here sorted by what you can cook now.")
+            Text(title).font(.headline)
+            Text(message)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .padding(.horizontal, 16)
+            Spacer()
         }
-        .padding(32)
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Data
@@ -108,48 +145,38 @@ struct CanCookView: View {
     private func load() async {
         isLoading = true
         items = (try? await APIClient.shared.getCookability()) ?? []
+        // Auto-select the most useful tab
+        if !canCook.isEmpty         { selectedTab = 0 }
+        else if !almostThere.isEmpty { selectedTab = 1 }
+        else if !needMore.isEmpty   { selectedTab = 2 }
+        else                        { selectedTab = 0 }
         isLoading = false
     }
 }
 
-// MARK: - Recipe card
+// MARK: - Vertical recipe card
 
-private struct RecipeCard: View {
+struct VerticalRecipeCard: View {
     let item: CookabilityItem
-    private let cardWidth: CGFloat = 220
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Square thumbnail
+
+            // Thumbnail — fixed height banner
             Rectangle()
-                .aspectRatio(1, contentMode: .fit)
-                .overlay(
-                    Group {
-                        if let urlStr = item.thumbnailURL, let url = URL(string: urlStr) {
-                            CachedAsyncImage(url: url) { img in
-                                img.resizable().scaledToFill()
-                            } placeholder: {
-                                Color(.systemGray5)
-                            }
-                        } else {
-                            Color(.systemGray5)
-                                .overlay(Image(systemName: "fork.knife")
-                                    .foregroundStyle(.tertiary))
-                        }
-                    }
-                )
+                .frame(height: 210)
+                .overlay(thumbnailContent)
                 .clipped()
 
             // Info panel
-            VStack(alignment: .leading, spacing: 8) {
-                // Title — always reserves 2-line height so cards stay uniform
+            VStack(alignment: .leading, spacing: 10) {
+
                 Text(item.dishName)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.headline)
                     .lineLimit(2)
-                    .frame(maxWidth: .infinity, minHeight: 40, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, minHeight: 48, alignment: .topLeading)
                     .foregroundStyle(.primary)
 
-                // Tag chips — wrapping flow, no scroll
                 if hasTags {
                     TagFlow(spacing: 5) {
                         if let effort = item.effort {
@@ -159,8 +186,11 @@ private struct RecipeCard: View {
                             TagChip(text: timeLabel(mins), icon: "clock", color: .blue)
                         }
                         if let servings = item.servings {
-                            TagChip(text: "\(servings) serving\(servings == 1 ? "" : "s")",
-                                    icon: "person.2", color: .purple)
+                            TagChip(
+                                text: "\(servings) serving\(servings == 1 ? "" : "s")",
+                                icon: "person.2",
+                                color: .purple
+                            )
                         }
                         if let protein = item.proteinLevel, protein == "high" {
                             TagChip(text: "High protein", icon: "bolt.fill", color: .green)
@@ -175,30 +205,47 @@ private struct RecipeCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                // Missing ingredients warning
                 if item.missingCount > 0 {
-                    HStack(spacing: 4) {
-                        Image(systemName: "cart.badge.plus")
-                            .font(.caption2)
-                        Text("Missing: \(item.missingIngredients.prefix(3).joined(separator: ", "))\(item.missingIngredients.count > 3 ? "…" : "")")
-                            .font(.caption2)
-                            .lineLimit(2)
+                    HStack(spacing: 5) {
+                        Image(systemName: "cart.badge.plus").font(.caption2)
+                        Text(
+                            "Missing: \(item.missingIngredients.prefix(4).joined(separator: ", "))"
+                            + (item.missingIngredients.count > 4 ? "…" : "")
+                        )
+                        .font(.caption2)
+                        .lineLimit(2)
                     }
                     .foregroundStyle(.orange)
                 }
             }
-            .padding(10)
+            .padding(14)
         }
-        .frame(width: cardWidth)
         .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .shadow(color: .black.opacity(0.08), radius: 6, x: 0, y: 2)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .shadow(color: .black.opacity(0.07), radius: 8, x: 0, y: 3)
+    }
+
+    @ViewBuilder
+    private var thumbnailContent: some View {
+        if let urlStr = item.thumbnailURL, let url = URL(string: urlStr) {
+            CachedAsyncImage(url: url) { img in
+                img.resizable().scaledToFill()
+            } placeholder: {
+                Color(.systemGray5)
+            }
+        } else {
+            Color(.systemGray5)
+                .overlay(
+                    Image(systemName: "fork.knife")
+                        .font(.largeTitle)
+                        .foregroundStyle(.tertiary)
+                )
+        }
     }
 
     private var hasTags: Bool {
         item.effort != nil || item.timeMinutes != nil || item.servings != nil
-        || item.proteinLevel == "high"
-        || item.calorieLevel != nil || item.proteinSource != nil
+        || item.proteinLevel == "high" || item.calorieLevel != nil || item.proteinSource != nil
     }
 
     private func timeLabel(_ mins: Int) -> String {
@@ -208,21 +255,19 @@ private struct RecipeCard: View {
 
 // MARK: - Tag chip
 
-private struct TagChip: View {
+struct TagChip: View {
     var text: String
     var icon: String? = nil
     var color: Color = .gray
 
-    // Convenience init for effort tags
     init(effortTag: String) {
         switch effortTag.lowercased() {
-        case "easy":   self.init(text: "Easy",   icon: "face.smiling",  color: .green)
-        case "hard":   self.init(text: "Hard",   icon: "flame",         color: .red)
-        default:       self.init(text: "Medium", icon: "minus.circle",  color: .orange)
+        case "easy":  self.init(text: "Easy",   icon: "face.smiling", color: .green)
+        case "hard":  self.init(text: "Hard",   icon: "flame",        color: .red)
+        default:      self.init(text: "Medium", icon: "minus.circle", color: .orange)
         }
     }
 
-    // Convenience init for calorie level tags
     init(calorieTag: String) {
         switch calorieTag.lowercased() {
         case "low":  self.init(text: "Low cal",  icon: "leaf",       color: .green)
@@ -231,7 +276,6 @@ private struct TagChip: View {
         }
     }
 
-    // Convenience init for protein source tags
     init(proteinSourceTag: String) {
         let icon: String
         switch proteinSourceTag.lowercased() {
@@ -259,7 +303,9 @@ private struct TagChip: View {
 
     var body: some View {
         HStack(spacing: 3) {
-            if let icon { Image(systemName: icon).font(.system(size: 9, weight: .semibold)) }
+            if let icon {
+                Image(systemName: icon).font(.system(size: 9, weight: .semibold))
+            }
             Text(text).font(.system(size: 10, weight: .semibold))
         }
         .foregroundStyle(color)
@@ -271,7 +317,7 @@ private struct TagChip: View {
 
 // MARK: - Wrapping flow layout (iOS 16+)
 
-private struct TagFlow: Layout {
+struct TagFlow: Layout {
     var spacing: CGFloat = 6
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {

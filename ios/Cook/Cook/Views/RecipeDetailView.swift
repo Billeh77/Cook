@@ -5,6 +5,9 @@ import SwiftUI
 struct RecipeDetailView: View {
     let recipeId: String
     let recipeTitle: String
+    /// Canonical names of ingredients not in the user's pantry.
+    /// Passed from CanCookView; empty when opened from Saved tab.
+    var missingIngredients: [String] = []
 
     @State private var recipe: RecipeDetail?
     @State private var isLoading = true
@@ -22,7 +25,7 @@ struct RecipeDetailView: View {
                 }
                 .padding()
             } else if let recipe {
-                RecipeDetailContent(recipe: recipe)
+                RecipeDetailContent(recipe: recipe, missingIngredients: missingIngredients)
             }
         }
         .navigationTitle(recipeTitle)
@@ -42,24 +45,65 @@ struct RecipeDetailView: View {
 
 private struct RecipeDetailContent: View {
     let recipe: RecipeDetail
+    let missingIngredients: [String]
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 20) {
 
                 VideoThumbnailCard(recipe: recipe)
 
+                // Tags strip
+                if hasTags {
+                    TagFlow(spacing: 6) {
+                        if let effort = recipe.effort { TagChip(effortTag: effort) }
+                        if let mins = recipe.timeMinutes {
+                            TagChip(text: timeLabel(mins), icon: "clock", color: .blue)
+                        }
+                        if let servings = recipe.servings {
+                            TagChip(
+                                text: "\(servings) serving\(servings == 1 ? "" : "s")",
+                                icon: "person.2",
+                                color: .purple
+                            )
+                        }
+                        if let protein = recipe.proteinLevel, protein == "high" {
+                            TagChip(text: "High protein", icon: "bolt.fill", color: .green)
+                        }
+                        if let cal = recipe.calorieLevel { TagChip(calorieTag: cal) }
+                        if let src = recipe.proteinSource { TagChip(proteinSourceTag: src) }
+                    }
+                    .padding(.horizontal)
+                }
+
+                // Missing ingredients summary (only when we have that info)
+                if !missingIngredients.isEmpty {
+                    HStack(spacing: 6) {
+                        Image(systemName: "cart.badge.plus")
+                            .foregroundStyle(.orange)
+                        Text("Missing \(missingIngredients.count) ingredient\(missingIngredients.count == 1 ? "" : "s")")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.orange)
+                    }
+                    .padding(.horizontal)
+                }
+
+                // Ingredients
                 if !recipe.ingredients.isEmpty {
                     SectionCard(title: "Ingredients", icon: "cart") {
                         VStack(alignment: .leading, spacing: 10) {
                             ForEach(recipe.ingredients) { ing in
-                                IngredientDetailRow(ingredient: ing)
+                                let isMissing = missingIngredients.contains(
+                                    where: { $0.lowercased() == ing.canonicalName.lowercased() }
+                                )
+                                IngredientDetailRow(ingredient: ing, isMissing: isMissing)
                                 if ing.id != recipe.ingredients.last?.id { Divider() }
                             }
                         }
                     }
                 }
 
+                // Steps
                 if !recipe.steps.isEmpty {
                     SectionCard(title: "Instructions", icon: "list.number") {
                         VStack(alignment: .leading, spacing: 14) {
@@ -89,6 +133,15 @@ private struct RecipeDetailContent: View {
             .padding()
         }
     }
+
+    private var hasTags: Bool {
+        recipe.effort != nil || recipe.timeMinutes != nil || recipe.servings != nil
+        || recipe.proteinLevel != nil || recipe.calorieLevel != nil || recipe.proteinSource != nil
+    }
+
+    private func timeLabel(_ mins: Int) -> String {
+        mins < 60 ? "\(mins) min" : "\(mins / 60)h \(mins % 60 > 0 ? "\(mins % 60)m" : "")"
+    }
 }
 
 // MARK: - Square thumbnail card with platform watch button
@@ -102,11 +155,10 @@ private struct VideoThumbnailCard: View {
                 Label(creator, systemImage: "person.circle")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
             }
 
             ZStack(alignment: .bottomTrailing) {
-                // Rectangle establishes the square FIRST — image fills it via overlay.
-                // This prevents AsyncImage from dictating its own size.
                 Rectangle()
                     .aspectRatio(1, contentMode: .fit)
                     .overlay(
@@ -129,7 +181,6 @@ private struct VideoThumbnailCard: View {
                     )
                     .clipped()
 
-                // Discrete "Watch on …" button — bottom right
                 if let urlStr = recipe.sourceURL, let url = URL(string: urlStr) {
                     Link(destination: url) {
                         HStack(spacing: 5) {
@@ -150,7 +201,6 @@ private struct VideoThumbnailCard: View {
         }
     }
 
-    /// "Watch on TikTok", "Watch on Instagram", etc.
     private var watchLabel: String {
         switch recipe.platform.lowercased() {
         case "tiktok":    return "Watch on TikTok"
@@ -184,19 +234,33 @@ private struct SectionCard<Content: View>: View {
 
 private struct IngredientDetailRow: View {
     let ingredient: IngredientResponse
+    var isMissing: Bool = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: categoryIcon(ingredient.category))
                 .frame(width: 20)
-                .foregroundStyle(.orange.opacity(0.8))
+                .foregroundStyle(isMissing ? .orange : .orange.opacity(0.8))
                 .padding(.top, 1)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
-                    if let qty = ingredient.quantity { Text(qty).fontWeight(.medium) }
-                    if let unit = ingredient.unit    { Text(unit).foregroundStyle(.secondary) }
+                    if let qty = ingredient.quantity {
+                        Text(qty).fontWeight(.medium)
+                    }
+                    if let unit = ingredient.unit {
+                        Text(unit).foregroundStyle(.secondary)
+                    }
                     Text(ingredient.canonicalName).fontWeight(.medium)
+
+                    if isMissing {
+                        Text("need")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.orange, in: Capsule())
+                    }
                 }
                 .font(.subheadline)
 
