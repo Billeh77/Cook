@@ -6,8 +6,8 @@ struct CanCookView: View {
     @State private var selectedTab = 0
 
     private var canCook:    [CookabilityItem] { items.filter { $0.missingCount == 0 } }
-    private var almostThere:[CookabilityItem] { items.filter { $0.missingCount > 0 && $0.missingCount <= 2 } }
-    private var needMore:   [CookabilityItem] { items.filter { $0.missingCount > 2 } }
+    private var almostThere:[CookabilityItem] { items.filter { $0.missingCount > 0 && $0.missingCount <= 3 } }
+    private var needMore:   [CookabilityItem] { items.filter { $0.missingCount > 3 } }
 
     private let tabTitles = ["Can Cook", "Almost There", "Need More"]
 
@@ -162,9 +162,9 @@ struct VerticalRecipeCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // Thumbnail — fixed height banner
+            // Thumbnail — square
             Rectangle()
-                .frame(height: 210)
+                .aspectRatio(1, contentMode: .fit)
                 .overlay(thumbnailContent)
                 .clipped()
 
@@ -173,8 +173,8 @@ struct VerticalRecipeCard: View {
 
                 Text(item.dishName)
                     .font(.headline)
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, minHeight: 48, alignment: .topLeading)
+                    .lineLimit(3)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
                     .foregroundStyle(.primary)
 
                 if hasTags {
@@ -208,12 +208,16 @@ struct VerticalRecipeCard: View {
                 if item.missingCount > 0 {
                     HStack(spacing: 5) {
                         Image(systemName: "cart.badge.plus").font(.caption2)
-                        Text(
-                            "Missing: \(item.missingIngredients.prefix(4).joined(separator: ", "))"
-                            + (item.missingIngredients.count > 4 ? "…" : "")
-                        )
-                        .font(.caption2)
-                        .lineLimit(2)
+                        if item.missingCount <= 3 {
+                            // Almost there — show exactly which ingredients
+                            Text("Missing: \(item.missingIngredients.joined(separator: ", "))")
+                                .font(.caption2)
+                                .lineLimit(2)
+                        } else {
+                            // Need more — just show the count
+                            Text("Missing \(item.missingCount) ingredients")
+                                .font(.caption2)
+                        }
                     }
                     .foregroundStyle(.orange)
                 }
