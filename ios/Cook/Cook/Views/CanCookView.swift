@@ -223,41 +223,63 @@ struct VerticalRecipeCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // Thumbnail — square with action buttons overlaid bottom-right
-            ZStack(alignment: .bottomTrailing) {
-                Rectangle()
-                    .aspectRatio(1, contentMode: .fit)
-                    .overlay(thumbnailContent)
-                    .clipped()
-
-                HStack(spacing: 10) {
-                    CardActionButton(
-                        systemImage: isFavorited ? "heart.fill" : "heart",
-                        color: isFavorited ? .red : .white
-                    ) {
-                        let newValue = !isFavorited
-                        isFavorited = newValue          // optimistic
-                        Task {
-                            do {
-                                try await APIClient.shared.setFavorite(id: item.id, isFavorited: newValue)
-                            } catch {
-                                isFavorited = !newValue // revert on failure
+            // Thumbnail — square with overlays
+            Rectangle()
+                .aspectRatio(1, contentMode: .fit)
+                .overlay(thumbnailContent)
+                .clipped()
+                // Missing badge — top left
+                .overlay(alignment: .topLeading) {
+                    if item.missingCount > 0 {
+                        HStack(spacing: 4) {
+                            Image(systemName: "cart.badge.plus")
+                                .font(.system(size: 9, weight: .bold))
+                            if item.missingCount <= 3 {
+                                Text(item.missingIngredients.joined(separator: ", "))
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .lineLimit(2)
+                            } else {
+                                Text("Missing \(item.missingCount) ingredients")
+                                    .font(.system(size: 10, weight: .semibold))
                             }
                         }
-                    }
-
-                    if item.missingCount > 0 {
-                        CardActionButton(systemImage: "cart.badge.plus") {
-                            onAddToGroceries()
-                        }
-                    }
-
-                    CardActionButton(systemImage: "trash") {
-                        onDelete()
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(.black.opacity(0.5), in: Capsule())
+                        .padding(10)
                     }
                 }
-                .padding(12)
-            }
+                // Action buttons — bottom right
+                .overlay(alignment: .bottomTrailing) {
+                    HStack(spacing: 10) {
+                        CardActionButton(
+                            systemImage: isFavorited ? "heart.fill" : "heart",
+                            color: isFavorited ? .red : .white
+                        ) {
+                            let newValue = !isFavorited
+                            isFavorited = newValue
+                            Task {
+                                do {
+                                    try await APIClient.shared.setFavorite(id: item.id, isFavorited: newValue)
+                                } catch {
+                                    isFavorited = !newValue
+                                }
+                            }
+                        }
+
+                        if item.missingCount > 0 {
+                            CardActionButton(systemImage: "cart.badge.plus") {
+                                onAddToGroceries()
+                            }
+                        }
+
+                        CardActionButton(systemImage: "trash") {
+                            onDelete()
+                        }
+                    }
+                    .padding(12)
+                }
 
             // Info panel
             VStack(alignment: .leading, spacing: 10) {
@@ -296,22 +318,7 @@ struct VerticalRecipeCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                if item.missingCount > 0 {
-                    HStack(spacing: 5) {
-                        Image(systemName: "cart.badge.plus").font(.caption2)
-                        if item.missingCount <= 3 {
-                            // Almost there — show exactly which ingredients
-                            Text("Missing: \(item.missingIngredients.joined(separator: ", "))")
-                                .font(.caption2)
-                                .lineLimit(2)
-                        } else {
-                            // Need more — just show the count
-                            Text("Missing \(item.missingCount) ingredients")
-                                .font(.caption2)
-                        }
-                    }
-                    .foregroundStyle(.orange)
-                }
+
             }
             .padding(14)
         }
