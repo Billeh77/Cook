@@ -112,13 +112,10 @@ private struct VideoThumbnailCard: View {
                     .overlay(
                         Group {
                             if let urlStr = recipe.thumbnailURL, let url = URL(string: urlStr) {
-                                AsyncImage(url: url) { phase in
-                                    switch phase {
-                                    case .success(let img):
-                                        img.resizable().scaledToFill()
-                                    default:
-                                        Color(.systemGray5)
-                                    }
+                                CachedAsyncImage(url: url) { img in
+                                    img.resizable().scaledToFill()
+                                } placeholder: {
+                                    Color(.systemGray5)
                                 }
                             } else {
                                 Color(.systemGray5)

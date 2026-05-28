@@ -107,15 +107,10 @@ struct RecipeRow: View {
             // Thumbnail
             Group {
                 if let urlStr = recipe.thumbnailURL, let url = URL(string: urlStr) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image.resizable().scaledToFill()
-                        case .failure, .empty:
-                            placeholder
-                        @unknown default:
-                            placeholder
-                        }
+                    CachedAsyncImage(url: url) { img in
+                        img.resizable().scaledToFill()
+                    } placeholder: {
+                        placeholder
                     }
                 } else {
                     placeholder

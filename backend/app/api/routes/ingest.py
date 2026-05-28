@@ -7,6 +7,7 @@ from app.models import Recipe, Ingredient
 from app.api.dependencies import get_current_user
 from app.services.ingestion.platform_detector import detect_platform, UnsupportedPlatformError
 from app.services.ingestion.tiktok_oembed import fetch_tiktok_oembed
+from app.services.ingestion.thumbnail_storage import rehost_thumbnail
 from app.services.ai.recipe_extractor import extract_recipe
 
 router = APIRouter()
@@ -97,7 +98,14 @@ async def ingest_link(
         protein_source=extraction.protein_source,
     )
     session.add(db_recipe)
-    session.flush()
+    session.flush()  # assigns db_recipe.id without committing
+
+    # 4b. Re-host thumbnail in Supabase Storage so the URL never expires.
+    #     Falls back to the original TikTok CDN URL if storage is not configured.
+    if raw.thumbnail_url:
+        permanent_url = await rehost_thumbnail(raw.thumbnail_url, str(db_recipe.id))
+        if permanent_url:
+            db_recipe.thumbnail_url = permanent_url
 
     # 5. Save ingredients
     db_ingredients: list[Ingredient] = []
