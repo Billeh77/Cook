@@ -51,7 +51,16 @@ struct CanCookView: View {
                 }
             }
             .navigationTitle("Cook")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "fork.knife.circle.fill")
+                            .foregroundStyle(.orange)
+                        Text("Cook")
+                            .font(.headline.bold())
+                    }
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button { Task { await load() } } label: {
                         Image(systemName: "arrow.clockwise")
@@ -306,11 +315,11 @@ struct TagChip: View {
     }
 
     var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 4) {
             if let icon {
-                Image(systemName: icon).font(.system(size: 9, weight: .semibold))
+                Image(systemName: icon).font(.system(size: 12, weight: .semibold))
             }
-            Text(text).font(.system(size: 10, weight: .semibold))
+            Text(text).font(.system(size: 14, weight: .semibold))
         }
         .foregroundStyle(color)
         .padding(.horizontal, 7)
