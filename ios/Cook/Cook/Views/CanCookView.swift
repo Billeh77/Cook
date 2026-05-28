@@ -118,7 +118,20 @@ struct CanCookView: View {
                                 recipeTitle: item.dishName,
                                 missingIngredients: item.missingIngredients
                             )) {
-                                VerticalRecipeCard(item: item)
+                                VerticalRecipeCard(
+                                    item: item,
+                                    onDelete: {
+                                        Task {
+                                            try? await APIClient.shared.deleteRecipe(id: item.id)
+                                            await load()
+                                        }
+                                    },
+                                    onAddToGroceries: {
+                                        Task {
+                                            _ = try? await APIClient.shared.generateGroceryList(recipeIds: [item.id])
+                                        }
+                                    }
+                                )
                             }
                             .buttonStyle(.plain)
                         }
@@ -167,15 +180,41 @@ struct CanCookView: View {
 
 struct VerticalRecipeCard: View {
     let item: CookabilityItem
+    var onDelete: () -> Void = {}
+    var onAddToGroceries: () -> Void = {}
+
+    @State private var isFavorited = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
 
-            // Thumbnail — square
-            Rectangle()
-                .aspectRatio(1, contentMode: .fit)
-                .overlay(thumbnailContent)
-                .clipped()
+            // Thumbnail — square with action buttons overlaid bottom-right
+            ZStack(alignment: .bottomTrailing) {
+                Rectangle()
+                    .aspectRatio(1, contentMode: .fit)
+                    .overlay(thumbnailContent)
+                    .clipped()
+
+                VStack(spacing: 10) {
+                    CardActionButton(
+                        systemImage: isFavorited ? "heart.fill" : "heart",
+                        color: isFavorited ? .red : .white
+                    ) {
+                        isFavorited.toggle()
+                    }
+
+                    if item.missingCount > 0 {
+                        CardActionButton(systemImage: "cart.badge.plus") {
+                            onAddToGroceries()
+                        }
+                    }
+
+                    CardActionButton(systemImage: "trash") {
+                        onDelete()
+                    }
+                }
+                .padding(12)
+            }
 
             // Info panel
             VStack(alignment: .leading, spacing: 10) {
@@ -263,6 +302,25 @@ struct VerticalRecipeCard: View {
 
     private func timeLabel(_ mins: Int) -> String {
         mins < 60 ? "\(mins) min" : "\(mins / 60)h \(mins % 60 > 0 ? "\(mins % 60)m" : "")"
+    }
+}
+
+// MARK: - Card action button (overlaid on image)
+
+struct CardActionButton: View {
+    let systemImage: String
+    var color: Color = .white
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(color)
+                .frame(width: 36, height: 36)
+                .background(.black.opacity(0.45), in: Circle())
+        }
+        .buttonStyle(.borderless)
     }
 }
 
