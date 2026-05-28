@@ -5,7 +5,7 @@ struct CanCookView: View {
     @State private var isLoading = false
     @State private var selectedTab = 0
     @State private var hasSetInitialTab = false
-    @State private var groceryConfirmation: String? = nil
+    @State private var showGroceryToast = false
 
     private var canCook:    [CookabilityItem] { items.filter { $0.missingCount == 0 } }
     private var almostThere:[CookabilityItem] { items.filter { $0.missingCount > 0 && $0.missingCount <= 3 } }
@@ -72,14 +72,24 @@ struct CanCookView: View {
             }
             .task { await load() }
             .onAppear { Task { await load() } }
-            .alert("Added to Grocery List", isPresented: Binding(
-                get: { groceryConfirmation != nil },
-                set: { if !$0 { groceryConfirmation = nil } }
-            )) {
-                Button("OK") { groceryConfirmation = nil }
-            } message: {
-                Text(groceryConfirmation ?? "")
+            .overlay(alignment: .bottom) {
+                if showGroceryToast {
+                    HStack(spacing: 8) {
+                        Image(systemName: "cart.badge.checkmark")
+                            .font(.subheadline.weight(.semibold))
+                        Text("Missing items added to grocery list")
+                            .font(.subheadline.weight(.medium))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 12)
+                    .background(.green.opacity(0.92), in: Capsule())
+                    .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
+                    .padding(.bottom, 28)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
+            .animation(.spring(duration: 0.35), value: showGroceryToast)
         }
     }
 
@@ -138,12 +148,10 @@ struct CanCookView: View {
                                     },
                                     onAddToGroceries: {
                                         Task {
-                                            if let added = try? await APIClient.shared.generateGroceryList(recipeIds: [item.id]) {
-                                                let n = added.count
-                                                groceryConfirmation = n > 0
-                                                    ? "\(n) item\(n == 1 ? "" : "s") added to your grocery list"
-                                                    : "Ingredients already on your grocery list"
-                                            }
+                                            _ = try? await APIClient.shared.generateGroceryList(recipeIds: [item.id])
+                                            showGroceryToast = true
+                                            try? await Task.sleep(for: .seconds(2))
+                                            showGroceryToast = false
                                         }
                                     }
                                 )
