@@ -62,6 +62,7 @@ struct RecipeDetail: Codable, Identifiable {
     let proteinLevel: String?
     let calorieLevel: String?
     let proteinSource: String?
+    let isFavorited: Bool
 
     enum CodingKeys: String, CodingKey {
         case id, platform, confidence, steps, ingredients
@@ -77,6 +78,7 @@ struct RecipeDetail: Codable, Identifiable {
         case proteinLevel = "protein_level"
         case calorieLevel = "calorie_level"
         case proteinSource = "protein_source"
+        case isFavorited  = "is_favorited"
     }
 }
 
@@ -98,6 +100,7 @@ struct CookabilityItem: Codable, Identifiable {
     let proteinLevel: String?
     let calorieLevel: String?
     let proteinSource: String?
+    let isFavorited: Bool
     let missingCount: Int
     let missingIngredients: [String]
 
@@ -114,6 +117,7 @@ struct CookabilityItem: Codable, Identifiable {
         case proteinLevel      = "protein_level"
         case calorieLevel      = "calorie_level"
         case proteinSource     = "protein_source"
+        case isFavorited       = "is_favorited"
         case missingCount      = "missing_count"
         case missingIngredients = "missing_ingredients"
     }

@@ -4,6 +4,8 @@ struct CanCookView: View {
     @State private var items: [CookabilityItem] = []
     @State private var isLoading = false
     @State private var selectedTab = 0
+    @State private var hasSetInitialTab = false
+    @State private var groceryConfirmation: String? = nil
 
     private var canCook:    [CookabilityItem] { items.filter { $0.missingCount == 0 } }
     private var almostThere:[CookabilityItem] { items.filter { $0.missingCount > 0 && $0.missingCount <= 3 } }
@@ -70,6 +72,14 @@ struct CanCookView: View {
             }
             .task { await load() }
             .onAppear { Task { await load() } }
+            .alert("Added to Grocery List", isPresented: Binding(
+                get: { groceryConfirmation != nil },
+                set: { if !$0 { groceryConfirmation = nil } }
+            )) {
+                Button("OK") { groceryConfirmation = nil }
+            } message: {
+                Text(groceryConfirmation ?? "")
+            }
         }
     }
 
@@ -128,7 +138,12 @@ struct CanCookView: View {
                                     },
                                     onAddToGroceries: {
                                         Task {
-                                            _ = try? await APIClient.shared.generateGroceryList(recipeIds: [item.id])
+                                            if let added = try? await APIClient.shared.generateGroceryList(recipeIds: [item.id]) {
+                                                let n = added.count
+                                                groceryConfirmation = n > 0
+                                                    ? "\(n) item\(n == 1 ? "" : "s") added to your grocery list"
+                                                    : "Ingredients already on your grocery list"
+                                            }
                                         }
                                     }
                                 )
@@ -167,11 +182,14 @@ struct CanCookView: View {
     private func load() async {
         isLoading = true
         items = (try? await APIClient.shared.getCookability()) ?? []
-        // Auto-select the most useful tab
-        if !canCook.isEmpty         { selectedTab = 0 }
-        else if !almostThere.isEmpty { selectedTab = 1 }
-        else if !needMore.isEmpty   { selectedTab = 2 }
-        else                        { selectedTab = 0 }
+        // Only auto-select on first load — never reset the tab the user is on
+        if !hasSetInitialTab {
+            if !canCook.isEmpty          { selectedTab = 0 }
+            else if !almostThere.isEmpty { selectedTab = 1 }
+            else if !needMore.isEmpty    { selectedTab = 2 }
+            else                         { selectedTab = 0 }
+            hasSetInitialTab = true
+        }
         isLoading = false
     }
 }
@@ -183,7 +201,16 @@ struct VerticalRecipeCard: View {
     var onDelete: () -> Void = {}
     var onAddToGroceries: () -> Void = {}
 
-    @State private var isFavorited = false
+    @State private var isFavorited: Bool
+
+    init(item: CookabilityItem,
+         onDelete: @escaping () -> Void = {},
+         onAddToGroceries: @escaping () -> Void = {}) {
+        self.item = item
+        self.onDelete = onDelete
+        self.onAddToGroceries = onAddToGroceries
+        self._isFavorited = State(initialValue: item.isFavorited)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -200,7 +227,15 @@ struct VerticalRecipeCard: View {
                         systemImage: isFavorited ? "heart.fill" : "heart",
                         color: isFavorited ? .red : .white
                     ) {
-                        isFavorited.toggle()
+                        let newValue = !isFavorited
+                        isFavorited = newValue          // optimistic
+                        Task {
+                            do {
+                                try await APIClient.shared.setFavorite(id: item.id, isFavorited: newValue)
+                            } catch {
+                                isFavorited = !newValue // revert on failure
+                            }
+                        }
                     }
 
                     if item.missingCount > 0 {

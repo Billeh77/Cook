@@ -40,6 +40,9 @@ class RecipeOut(BaseModel):
     time_minutes: int | None = None
     is_batch_prep: bool = False
     protein_level: str | None = None
+    calorie_level: str | None = None
+    protein_source: str | None = None
+    is_favorited: bool = False
 
 
 class RecipeListItem(BaseModel):
@@ -58,6 +61,7 @@ class RecipeListItem(BaseModel):
     protein_level: str | None = None
     calorie_level: str | None = None
     protein_source: str | None = None
+    is_favorited: bool = False
 
 
 class CookabilityItem(BaseModel):
@@ -76,8 +80,13 @@ class CookabilityItem(BaseModel):
     protein_level: str | None = None
     calorie_level: str | None = None
     protein_source: str | None = None
+    is_favorited: bool = False
     missing_count: int = 0
     missing_ingredients: list[str] = []
+
+
+class FavoriteRequest(BaseModel):
+    is_favorited: bool
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
@@ -129,6 +138,7 @@ def get_cookability(
             protein_level=r.protein_level,
             calorie_level=r.calorie_level,
             protein_source=r.protein_source,
+            is_favorited=r.is_favorited or False,
             missing_count=len(missing),
             missing_ingredients=missing,
         ))
@@ -179,7 +189,29 @@ def get_recipe(
         protein_level=recipe.protein_level,
         calorie_level=recipe.calorie_level,
         protein_source=recipe.protein_source,
+        is_favorited=recipe.is_favorited or False,
     )
+
+
+@router.patch("/{recipe_id}/favorite", status_code=204)
+def set_favorite(
+    recipe_id: str,
+    body: FavoriteRequest,
+    session: Session = Depends(get_session),
+    user_id: str = Depends(get_current_user),
+):
+    try:
+        uid = _uuid.UUID(recipe_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid recipe ID")
+
+    recipe = session.get(Recipe, uid)
+    if not recipe or recipe.user_id != user_id:
+        raise HTTPException(status_code=404, detail="Recipe not found")
+
+    recipe.is_favorited = body.is_favorited
+    session.add(recipe)
+    session.commit()
 
 
 @router.delete("/{recipe_id}", status_code=204)
@@ -216,4 +248,5 @@ def _list_item(r: Recipe, ingredient_count: int) -> RecipeListItem:
         servings=r.servings, effort=r.effort, time_minutes=r.time_minutes,
         is_batch_prep=r.is_batch_prep or False, protein_level=r.protein_level,
         calorie_level=r.calorie_level, protein_source=r.protein_source,
+        is_favorited=r.is_favorited or False,
     )

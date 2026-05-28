@@ -38,6 +38,14 @@ final class APIClient {
         _ = try await perform(req)
     }
 
+    func setFavorite(id: String, isFavorited: Bool) async throws {
+        var req = makeRequest("/recipes/\(id)/favorite")
+        req.httpMethod = "PATCH"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONEncoder().encode(["is_favorited": isFavorited])
+        _ = try await perform(req)
+    }
+
     // MARK: - Ingest
 
     func ingestLink(url: String) async throws -> IngestResponse {
