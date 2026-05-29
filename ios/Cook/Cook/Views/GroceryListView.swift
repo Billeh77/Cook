@@ -5,13 +5,10 @@ struct GroceryListView: View {
     @State private var isLoading = false
     @State private var showRecipePicker = false
 
-    // Items split into unchecked (grouped by category) and checked
-    private var unchecked: [GroceryListItem] { items.filter { !$0.checked } }
-    private var checked:   [GroceryListItem] { items.filter {  $0.checked } }
+    private var checked: [GroceryListItem] { items.filter { $0.checked } }
 
-    // Group unchecked by category, sorted
     private var categories: [(String, [GroceryListItem])] {
-        let grouped = Dictionary(grouping: unchecked) { $0.category }
+        let grouped = Dictionary(grouping: items) { $0.category }
         return grouped.sorted { $0.key < $1.key }
     }
 
@@ -58,23 +55,12 @@ struct GroceryListView: View {
 
     private var list: some View {
         List {
-            // Unchecked items grouped by category
             ForEach(categories, id: \.0) { category, catItems in
                 Section(categoryLabel(category)) {
                     ForEach(catItems) { item in
                         GroceryRow(item: item) { await toggle(item) }
                     }
                     .onDelete { offsets in deleteItems(catItems, at: offsets) }
-                }
-            }
-
-            // Checked items at the bottom
-            if !checked.isEmpty {
-                Section("Done") {
-                    ForEach(checked) { item in
-                        GroceryRow(item: item) { await toggle(item) }
-                    }
-                    .onDelete { offsets in deleteItems(checked, at: offsets) }
                 }
             }
         }
