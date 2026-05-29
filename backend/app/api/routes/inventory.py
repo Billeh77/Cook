@@ -80,7 +80,7 @@ def list_inventory(
     items = session.exec(
         select(InventoryItem)
         .where(InventoryItem.user_id == user_id)
-        .order_by(InventoryItem.category, InventoryItem.canonical_name)
+        .order_by(InventoryItem.canonical_name)
     ).all()
     return [_out(i) for i in items]
 
