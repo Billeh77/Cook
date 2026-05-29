@@ -152,12 +152,22 @@ struct InventoryItem: Codable, Identifiable {
     let id: String
     let canonicalName: String
     let status: String        // "in_stock" | "low" | "out_of_stock" | "always_have"
+    let category: String
     let updatedAt: String
 
     enum CodingKeys: String, CodingKey {
-        case id, status
+        case id, status, category
         case canonicalName = "canonical_name"
         case updatedAt     = "updated_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id           = try c.decode(String.self, forKey: .id)
+        canonicalName = try c.decode(String.self, forKey: .canonicalName)
+        status       = try c.decode(String.self, forKey: .status)
+        category     = try c.decodeIfPresent(String.self, forKey: .category) ?? "other"
+        updatedAt    = try c.decode(String.self, forKey: .updatedAt)
     }
 }
 

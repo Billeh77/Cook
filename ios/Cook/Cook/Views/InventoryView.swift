@@ -5,6 +5,11 @@ struct InventoryView: View {
     @State private var isLoading = false
     @State private var showAddSheet = false
 
+    private var categories: [(String, [InventoryItem])] {
+        let grouped = Dictionary(grouping: items) { $0.category }
+        return grouped.sorted { categoryOrder($0.key) < categoryOrder($1.key) }
+    }
+
     var body: some View {
         NavigationStack {
             Group {
@@ -39,22 +44,19 @@ struct InventoryView: View {
 
     private var list: some View {
         List {
-            ForEach(items) { item in
-                InventoryRow(item: item) { newStatus in
-                    await updateStatus(item: item, to: newStatus)
-                }
-            }
-            .onDelete { offsets in
-                let toDelete = offsets.map { items[$0] }
-                items.remove(atOffsets: offsets)
-                Task {
-                    for item in toDelete {
-                        try? await APIClient.shared.deleteInventoryItem(id: item.id)
+            ForEach(categories, id: \.0) { category, catItems in
+                Section(categoryLabel(category)) {
+                    ForEach(catItems) { item in
+                        InventoryRow(item: item) { newStatus in
+                            await updateStatus(item: item, to: newStatus)
+                        } onDelete: {
+                            deleteItem(item)
+                        }
                     }
                 }
             }
         }
-        .listStyle(.plain)
+        .listStyle(.insetGrouped)
     }
 
     // MARK: - Empty state
@@ -77,6 +79,25 @@ struct InventoryView: View {
         .padding(32)
     }
 
+    // MARK: - Helpers
+
+    private func categoryLabel(_ raw: String) -> String {
+        switch raw {
+        case "produce": return "Produce"
+        case "dairy":   return "Dairy"
+        case "meat":    return "Meat & Seafood"
+        case "grain":   return "Grains & Bread"
+        case "spice":   return "Spices & Seasonings"
+        case "pantry":  return "Pantry"
+        default:        return "Other"
+        }
+    }
+
+    private func categoryOrder(_ raw: String) -> Int {
+        ["produce", "meat", "dairy", "grain", "pantry", "spice", "other"]
+            .firstIndex(of: raw) ?? 99
+    }
+
     // MARK: - Actions
 
     private func load() async {
@@ -87,13 +108,11 @@ struct InventoryView: View {
 
     private func addItem(name: String, status: String) async {
         guard let item = try? await APIClient.shared.addInventoryItem(name: name, status: status) else { return }
-        // Upsert: replace if canonical name already exists, else prepend
         if let idx = items.firstIndex(where: { $0.canonicalName == item.canonicalName }) {
             items[idx] = item
         } else {
-            items.insert(item, at: 0)
+            items.append(item)
         }
-        items.sort { $0.canonicalName < $1.canonicalName }
     }
 
     private func updateStatus(item: InventoryItem, to status: String) async {
@@ -102,6 +121,11 @@ struct InventoryView: View {
             items[idx] = updated
         }
     }
+
+    private func deleteItem(_ item: InventoryItem) {
+        items.removeAll { $0.id == item.id }
+        Task { try? await APIClient.shared.deleteInventoryItem(id: item.id) }
+    }
 }
 
 // MARK: - Inventory row
@@ -109,44 +133,68 @@ struct InventoryView: View {
 private struct InventoryRow: View {
     let item: InventoryItem
     let onStatusChange: (String) async -> Void
-
-    @State private var showPicker = false
+    let onDelete: () -> Void
 
     var body: some View {
-        HStack {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 10, height: 10)
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.canonicalName)
                     .font(.body)
                 Text(statusLabel)
                     .font(.caption)
-                    .foregroundStyle(statusColor.opacity(0.8))
+                    .foregroundStyle(statusColor)
             }
 
             Spacer()
-
-            // Status pill — tap to change
-            Button { showPicker = true } label: {
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 14, height: 14)
-                    .padding(8)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
         }
-        .padding(.vertical, 4)
-        .confirmationDialog("Update status for \(item.canonicalName)",
-                            isPresented: $showPicker,
-                            titleVisibility: .visible) {
-            ForEach(InventoryStatus.allCases) { s in
-                Button(s.label) { Task { await onStatusChange(s.rawValue) } }
+        .padding(.vertical, 2)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive) { onDelete() } label: {
+                Label("Delete", systemImage: "trash")
             }
-            Button("Cancel", role: .cancel) {}
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+            ForEach(InventoryStatus.allCases) { s in
+                if s.rawValue != item.status {
+                    Button {
+                        Task { await onStatusChange(s.rawValue) }
+                    } label: {
+                        Label(s.label, systemImage: statusIcon(s))
+                    }
+                    .tint(s.color)
+                }
+            }
+        }
+        .contextMenu {
+            ForEach(InventoryStatus.allCases) { s in
+                Button {
+                    Task { await onStatusChange(s.rawValue) }
+                } label: {
+                    Label(s.label, systemImage: statusIcon(s))
+                }
+            }
+            Divider()
+            Button(role: .destructive) { onDelete() } label: {
+                Label("Delete", systemImage: "trash")
+            }
         }
     }
 
     private var statusLabel: String { InventoryStatus(rawValue: item.status)?.label ?? item.status }
     private var statusColor: Color  { InventoryStatus(rawValue: item.status)?.color ?? .gray }
+
+    private func statusIcon(_ s: InventoryStatus) -> String {
+        switch s {
+        case .inStock:    return "checkmark.circle.fill"
+        case .low:        return "exclamationmark.circle.fill"
+        case .alwaysHave: return "star.circle.fill"
+        case .outOfStock: return "xmark.circle.fill"
+        }
+    }
 }
 
 // MARK: - Status enum

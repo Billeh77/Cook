@@ -12,6 +12,48 @@ router = APIRouter()
 
 VALID_STATUSES = {"in_stock", "low", "out_of_stock", "always_have"}
 
+_CATEGORY_KEYWORDS: dict[str, list[str]] = {
+    "produce": ["apple", "banana", "lemon", "lime", "tomato", "lettuce", "spinach",
+                "kale", "carrot", "celery", "onion", "garlic", "potato", "pepper",
+                "zucchini", "cucumber", "avocado", "strawberry", "blueberry", "mango",
+                "mushroom", "ginger", "cilantro", "parsley", "basil", "mint",
+                "scallion", "shallot", "leek", "eggplant", "asparagus", "arugula",
+                "broccoli", "cauliflower", "beet", "fennel", "corn", "pea", "herb",
+                "orange", "grape", "pineapple", "pear", "peach", "plum", "cherry",
+                "radish", "turnip", "artichoke", "bok choy", "cabbage", "romaine"],
+    "dairy":   ["milk", "cream", "butter", "cheese", "yogurt", "sour cream",
+                "mozzarella", "parmesan", "cheddar", "ricotta", "feta", "brie",
+                "half and half", "mascarpone", "kefir", "ghee", "gouda", "provolone"],
+    "meat":    ["chicken", "beef", "pork", "turkey", "lamb", "salmon", "tuna",
+                "shrimp", "bacon", "sausage", "steak", "fish", "seafood", "crab",
+                "lobster", "scallop", "prosciutto", "pancetta", "salami", "ham",
+                "duck", "veal", "anchovy", "sardine", "tilapia", "cod", "halibut",
+                "ground beef", "ground turkey", "ground pork", "mahi", "clam", "oyster"],
+    "grain":   ["flour", "rice", "pasta", "bread", "oat", "quinoa", "barley",
+                "tortilla", "noodle", "spaghetti", "penne", "breadcrumb", "panko",
+                "cracker", "couscous", "polenta", "rye", "wheat", "cereal", "cornmeal"],
+    "spice":   ["salt", "pepper", "cumin", "coriander", "paprika", "cayenne",
+                "turmeric", "cinnamon", "nutmeg", "clove", "oregano", "thyme",
+                "rosemary", "bay leaf", "chili powder", "curry", "garam masala",
+                "garlic powder", "onion powder", "red pepper flake", "saffron",
+                "seasoning", "spice", "allspice", "cardamom", "dried"],
+    "pantry":  ["oil", "vinegar", "soy sauce", "fish sauce", "oyster sauce",
+                "hot sauce", "ketchup", "mustard", "mayonnaise", "honey", "maple",
+                "sugar", "baking powder", "baking soda", "vanilla", "chocolate",
+                "cocoa", "coconut milk", "broth", "stock", "tomato paste",
+                "canned", "beans", "lentil", "chickpea", "tahini", "peanut butter",
+                "almond butter", "jam", "wine", "miso", "worcestershire", "sauce",
+                "olive oil", "sesame oil", "coconut oil", "molasses", "syrup"],
+}
+
+
+def _classify_category(name: str) -> str:
+    lower = name.lower()
+    for category, keywords in _CATEGORY_KEYWORDS.items():
+        if any(kw in lower for kw in keywords):
+            return category
+    return "other"
+
 
 class InventoryItemCreate(BaseModel):
     canonical_name: str
@@ -26,6 +68,7 @@ class InventoryItemOut(BaseModel):
     id: str
     canonical_name: str
     status: str
+    category: str
     updated_at: str
 
 
@@ -37,7 +80,7 @@ def list_inventory(
     items = session.exec(
         select(InventoryItem)
         .where(InventoryItem.user_id == user_id)
-        .order_by(InventoryItem.canonical_name)
+        .order_by(InventoryItem.category, InventoryItem.canonical_name)
     ).all()
     return [_out(i) for i in items]
 
@@ -122,5 +165,6 @@ def _out(item: InventoryItem) -> InventoryItemOut:
         id=str(item.id),
         canonical_name=item.canonical_name,
         status=item.status,
+        category=_classify_category(item.canonical_name),
         updated_at=item.updated_at.isoformat(),
     )
