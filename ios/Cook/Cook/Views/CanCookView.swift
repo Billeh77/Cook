@@ -2,10 +2,18 @@ import SwiftUI
 
 struct CanCookView: View {
     @State private var items: [CookabilityItem] = []
+    @State private var plannedRecipeIds: Set<String> = []
     @State private var isLoading = false
     @State private var selectedTab = 0
     @State private var hasSetInitialTab = false
+
+    // Grocery toast (existing)
     @State private var showGroceryToast = false
+
+    // Cook / plan action
+    @State private var cookPlanTarget: CookabilityItem?   // drives confirmationDialog
+    @State private var servingsItem: CookabilityItem?     // drives ServingsSheet
+    @State private var actionToastMessage: String?        // short confirmation toast
 
     private var canCook:    [CookabilityItem] { items.filter { $0.missingCount == 0 } }
     private var almostThere:[CookabilityItem] { items.filter { $0.missingCount > 0 && $0.missingCount <= 3 } }
@@ -66,24 +74,73 @@ struct CanCookView: View {
             }
             .task { await load() }
             .onAppear { Task { await load() } }
+            // ── Grocery toast ──────────────────────────────────────────────
             .overlay(alignment: .bottom) {
-                if showGroceryToast {
-                    HStack(spacing: 8) {
-                        Image(systemName: "cart.badge.checkmark")
-                            .font(.subheadline.weight(.semibold))
-                        Text("Missing items added to grocery list")
-                            .font(.subheadline.weight(.medium))
+                VStack(spacing: 10) {
+                    if let msg = actionToastMessage {
+                        actionToastView(msg)
                     }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 12)
-                    .background(.green.opacity(0.92), in: Capsule())
-                    .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
-                    .padding(.bottom, 28)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    if showGroceryToast {
+                        groceryToastView
+                    }
                 }
+                .padding(.bottom, 28)
             }
             .animation(.spring(duration: 0.35), value: showGroceryToast)
+            .animation(.spring(duration: 0.35), value: actionToastMessage)
+            // ── Cook / Plan confirmation dialog ────────────────────────────
+            .confirmationDialog(
+                cookPlanTarget?.dishName ?? "",
+                isPresented: Binding(
+                    get: { cookPlanTarget != nil },
+                    set: { if !$0 { cookPlanTarget = nil } }
+                ),
+                presenting: cookPlanTarget,
+                titleVisibility: .visible
+            ) { target in
+                if plannedRecipeIds.contains(target.id) {
+                    Button("Cook Now") {
+                        let t = target; cookPlanTarget = nil
+                        servingsItem = t
+                    }
+                    Button("Remove from Plan", role: .destructive) {
+                        let id = target.id; cookPlanTarget = nil
+                        Task {
+                            try? await APIClient.shared.removeFromPlanner(recipeId: id)
+                            plannedRecipeIds.remove(id)
+                            await showActionToast("Removed from your plan")
+                        }
+                    }
+                } else {
+                    Button("Cook Now") {
+                        let t = target; cookPlanTarget = nil
+                        servingsItem = t
+                    }
+                    Button("Add to Plan") {
+                        let id = target.id; cookPlanTarget = nil
+                        Task {
+                            try? await APIClient.shared.addToPlanner(recipeId: id)
+                            plannedRecipeIds.insert(id)
+                            await showActionToast("Added to your meal plan")
+                        }
+                    }
+                }
+                Button("Cancel", role: .cancel) { cookPlanTarget = nil }
+            } message: { target in
+                Text(plannedRecipeIds.contains(target.id) ? "This recipe is already in your plan." : "What would you like to do?")
+            }
+            // ── Servings sheet ─────────────────────────────────────────────
+            .sheet(item: $servingsItem) { target in
+                CookServingsSheet(mealName: target.dishName) { servings in
+                    servingsItem = nil
+                    Task {
+                        if (try? await APIClient.shared.logCooked(recipeId: target.id, servings: servings)) != nil {
+                            plannedRecipeIds.remove(target.id)
+                            await showActionToast("Cooked! Added to your history 🎉")
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -134,12 +191,7 @@ struct CanCookView: View {
                             )) {
                                 VerticalRecipeCard(
                                     item: item,
-                                    onDelete: {
-                                        Task {
-                                            try? await APIClient.shared.deleteRecipe(id: item.id)
-                                            await load()
-                                        }
-                                    },
+                                    isPlanned: plannedRecipeIds.contains(item.id),
                                     onAddToGroceries: {
                                         Task {
                                             _ = try? await APIClient.shared.generateGroceryList(recipeIds: [item.id])
@@ -147,7 +199,8 @@ struct CanCookView: View {
                                             try? await Task.sleep(for: .seconds(2))
                                             showGroceryToast = false
                                         }
-                                    }
+                                    },
+                                    onCookPlanTapped: { cookPlanTarget = item }
                                 )
                             }
                             .buttonStyle(.plain)
@@ -158,6 +211,34 @@ struct CanCookView: View {
                 .refreshable { await load() }
             }
         }
+    }
+
+    // MARK: - Toast views
+
+    private var groceryToastView: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "cart.badge.checkmark")
+                .font(.subheadline.weight(.semibold))
+            Text("Missing items added to grocery list")
+                .font(.subheadline.weight(.medium))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .background(.green.opacity(0.92), in: Capsule())
+        .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private func actionToastView(_ message: String) -> some View {
+        Text(message)
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+            .background(.orange.opacity(0.92), in: Capsule())
+            .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
     // MARK: - Empty state
@@ -183,10 +264,10 @@ struct CanCookView: View {
 
     private func load() async {
         isLoading = true
-        if let fetched = try? await APIClient.shared.getCookability() {
-            items = fetched
-        }
-        // Only auto-select on first load — never reset the tab the user is on
+        async let fetchedItems   = try? APIClient.shared.getCookability()
+        async let fetchedPlanned = try? APIClient.shared.getPlannedMeals()
+        if let f = await fetchedItems   { items = f }
+        if let p = await fetchedPlanned { plannedRecipeIds = Set(p.map { $0.recipeId }) }
         if !hasSetInitialTab {
             if !canCook.isEmpty          { selectedTab = 0 }
             else if !almostThere.isEmpty { selectedTab = 1 }
@@ -196,23 +277,33 @@ struct CanCookView: View {
         }
         isLoading = false
     }
+
+    @MainActor
+    private func showActionToast(_ message: String) async {
+        withAnimation { actionToastMessage = message }
+        try? await Task.sleep(for: .seconds(2))
+        withAnimation { actionToastMessage = nil }
+    }
 }
 
 // MARK: - Vertical recipe card
 
 struct VerticalRecipeCard: View {
     let item: CookabilityItem
-    var onDelete: () -> Void = {}
+    var isPlanned: Bool = false
     var onAddToGroceries: () -> Void = {}
+    var onCookPlanTapped: () -> Void = {}
 
     @State private var isFavorited: Bool
 
     init(item: CookabilityItem,
-         onDelete: @escaping () -> Void = {},
-         onAddToGroceries: @escaping () -> Void = {}) {
+         isPlanned: Bool = false,
+         onAddToGroceries: @escaping () -> Void = {},
+         onCookPlanTapped: @escaping () -> Void = {}) {
         self.item = item
-        self.onDelete = onDelete
+        self.isPlanned = isPlanned
         self.onAddToGroceries = onAddToGroceries
+        self.onCookPlanTapped = onCookPlanTapped
         self._isFavorited = State(initialValue: item.isFavorited)
     }
 
@@ -249,6 +340,7 @@ struct VerticalRecipeCard: View {
                 // Action buttons — bottom right
                 .overlay(alignment: .bottomTrailing) {
                     HStack(spacing: 10) {
+                        // Favorite
                         CardActionButton(
                             systemImage: isFavorited ? "heart.fill" : "heart",
                             color: isFavorited ? .red : .white
@@ -264,14 +356,19 @@ struct VerticalRecipeCard: View {
                             }
                         }
 
+                        // Grocery (only when missing ingredients)
                         if item.missingCount > 0 {
                             CardActionButton(systemImage: "cart.badge.plus") {
                                 onAddToGroceries()
                             }
                         }
 
-                        CardActionButton(systemImage: "trash") {
-                            onDelete()
+                        // Cook / Plan — replaces trash
+                        CardActionButton(
+                            systemImage: isPlanned ? "list.bullet.clipboard.fill" : "list.bullet.clipboard",
+                            color: isPlanned ? .orange : .white
+                        ) {
+                            onCookPlanTapped()
                         }
                     }
                     .padding(12)
@@ -288,9 +385,7 @@ struct VerticalRecipeCard: View {
 
                 if hasTags {
                     TagFlow(spacing: 5) {
-                        if let effort = item.effort {
-                            TagChip(effortTag: effort)
-                        }
+                        if let effort = item.effort { TagChip(effortTag: effort) }
                         if let mins = item.timeMinutes {
                             TagChip(text: timeLabel(mins), icon: "clock", color: .blue)
                         }
@@ -304,17 +399,11 @@ struct VerticalRecipeCard: View {
                         if let protein = item.proteinLevel, protein == "high" {
                             TagChip(text: "High protein", icon: "bolt.fill", color: .green)
                         }
-                        if let cal = item.calorieLevel {
-                            TagChip(calorieTag: cal)
-                        }
-                        if let src = item.proteinSource {
-                            TagChip(proteinSourceTag: src)
-                        }
+                        if let cal = item.calorieLevel { TagChip(calorieTag: cal) }
+                        if let src = item.proteinSource { TagChip(proteinSourceTag: src) }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
-
-
             }
             .padding(14)
         }
@@ -348,6 +437,45 @@ struct VerticalRecipeCard: View {
 
     private func timeLabel(_ mins: Int) -> String {
         mins < 60 ? "\(mins) min" : "\(mins / 60)h \(mins % 60 > 0 ? "\(mins % 60)m" : "")"
+    }
+}
+
+// MARK: - Servings sheet for CanCookView (self-contained)
+
+private struct CookServingsSheet: View {
+    let mealName: String
+    let onConfirm: (Int) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var servings = 2
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Stepper("Servings: \(servings)", value: $servings, in: 1...20)
+                } header: {
+                    Text(mealName)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .textCase(nil)
+                } footer: {
+                    Text("Logged to your cooking history and weekly stats.")
+                }
+            }
+            .navigationTitle("Mark as Cooked")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { onConfirm(servings) }
+                        .tint(.orange)
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }
 

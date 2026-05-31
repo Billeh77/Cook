@@ -5,11 +5,13 @@ import SwiftUI
 private enum ActiveSheet: Identifiable {
     case addMeals
     case cookConfirm(PlannedMealItem)
+    case logCooked
 
     var id: String {
         switch self {
         case .addMeals:             return "addMeals"
         case .cookConfirm(let m):   return "cook-\(m.id)"
+        case .logCooked:            return "logCooked"
         }
     }
 }
@@ -56,9 +58,16 @@ struct MealPlannerView: View {
                 }
 
                 // ── History ───────────────────────────────────────────────────
-                if !history.isEmpty {
-                    sectionHeader(title: "Cooked", count: history.count)
+                // Header always visible so user can log a cooked meal directly
+                sectionHeader(title: "Cooked", count: history.count) {
+                    Button { activeSheet = .logCooked } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(.orange)
+                    }
+                }
 
+                if !history.isEmpty {
                     VStack(spacing: 0) {
                         ForEach(history) { entry in
                             HistoryRow(entry: entry)
@@ -78,7 +87,7 @@ struct MealPlannerView: View {
         .refreshable { await load() }
         .task { await load() }
         // Single sheet driven by the enum — no competing presenters
-        .sheet(item: $activeSheet, onDismiss: { Task { await loadPlanned() } }) { sheet in
+        .sheet(item: $activeSheet, onDismiss: { Task { await load() } }) { sheet in
             switch sheet {
             case .addMeals:
                 AddToPlannerSheet(existingIds: Set(planned.map { $0.recipeId }))
@@ -86,6 +95,15 @@ struct MealPlannerView: View {
                 ServingsSheet(mealName: meal.dishName) { servings in
                     activeSheet = nil
                     Task { await markCooked(meal: meal, servings: servings) }
+                }
+            case .logCooked:
+                LogCookedSheet { recipeId, servings in
+                    activeSheet = nil
+                    Task {
+                        if let entry = try? await APIClient.shared.logCooked(recipeId: recipeId, servings: servings) {
+                            history.insert(entry, at: 0)
+                        }
+                    }
                 }
             }
         }
@@ -373,5 +391,89 @@ struct AddToPlannerSheet: View {
             }
         }
         .presentationDetents([.large])
+    }
+}
+
+// MARK: - Log cooked directly (skips planning step)
+// Two-screen NavigationStack inside the sheet: recipe list → servings page.
+
+struct LogCookedSheet: View {
+    /// Called with (recipeId, servings) when the user confirms a cook.
+    let onLog: (String, Int) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var allRecipes: [RecipeListItem] = []
+    @State private var isLoading = true
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if isLoading {
+                    ProgressView("Loading recipes…").tint(.orange)
+                } else if allRecipes.isEmpty {
+                    Text("No saved recipes yet.")
+                        .foregroundStyle(.secondary)
+                        .padding()
+                } else {
+                    List(allRecipes) { recipe in
+                        NavigationLink {
+                            LogServingsPage(recipe: recipe) { servings in
+                                onLog(recipe.id, servings)
+                                dismiss()
+                            }
+                        } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(recipe.dishName).font(.body)
+                                Text("\(recipe.ingredientCount) ingredients")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    .listStyle(.plain)
+                }
+            }
+            .navigationTitle("Log Cooked Meal")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+            .task {
+                allRecipes = (try? await APIClient.shared.getRecipes()) ?? []
+                isLoading = false
+            }
+        }
+        .presentationDetents([.large])
+    }
+}
+
+private struct LogServingsPage: View {
+    let recipe: RecipeListItem
+    let onConfirm: (Int) -> Void
+
+    @State private var servings = 2
+
+    var body: some View {
+        Form {
+            Section {
+                Stepper("Servings: \(servings)", value: $servings, in: 1...20)
+            } header: {
+                Text(recipe.dishName)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .textCase(nil)
+            } footer: {
+                Text("Logged to your cooking history and weekly stats.")
+            }
+        }
+        .navigationTitle("How many servings?")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Done") { onConfirm(servings) }
+                    .tint(.orange)
+            }
+        }
     }
 }
