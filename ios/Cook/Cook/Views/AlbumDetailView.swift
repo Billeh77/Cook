@@ -43,54 +43,61 @@ struct AlbumDetailView: View {
     }
 
     var body: some View {
-        Group {
-            if isLoading && recipes.isEmpty {
-                ProgressView("Loading…").tint(.orange)
-            } else if recipes.isEmpty {
-                emptyState
-            } else {
-                List {
-                    ForEach(recipes) { recipe in
-                        NavigationLink(destination: RecipeDetailView(
-                            recipeId: recipe.id,
-                            recipeTitle: recipe.dishName
-                        )) {
-                            RecipeRow(recipe: recipe)
+        mainContent
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    if isCustom {
+                        Button { showAddSheet = true } label: {
+                            Image(systemName: "plus")
                         }
+                        .tint(.orange)
                     }
-                    .onDelete(perform: canDeleteFromList ? handleDelete : nil)
-                }
-                .listStyle(.plain)
-                .refreshable { await load() }
-            }
-        }
-        .navigationTitle(title)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                if isCustom {
-                    Button { showAddSheet = true } label: {
-                        Image(systemName: "plus")
-                    }
-                    .tint(.orange)
                 }
             }
-        }
-        .sheet(isPresented: $showAddSheet, onDismiss: { Task { await load() } }) {
-            if let albumId = customAlbumId {
-                AddToAlbumSheet(albumId: albumId, existingIds: Set(recipes.map { $0.id }))
+            .sheet(isPresented: $showAddSheet, onDismiss: { Task { await load() } }) {
+                if let albumId = customAlbumId {
+                    AddToAlbumSheet(albumId: albumId, existingIds: Set(recipes.map { $0.id }))
+                }
             }
+            .alert("Error", isPresented: Binding(
+                get: { deleteError != nil },
+                set: { if !$0 { deleteError = nil } }
+            )) {
+                Button("OK", role: .cancel) { deleteError = nil }
+            } message: {
+                Text(deleteError ?? "")
+            }
+            .task { await load() }
+            .onAppear { Task { await load() } }
+    }
+
+    @ViewBuilder
+    private var mainContent: some View {
+        if isLoading && recipes.isEmpty {
+            ProgressView("Loading…").tint(.orange)
+        } else if recipes.isEmpty {
+            emptyState
+        } else {
+            recipeList
         }
-        .alert("Error", isPresented: Binding(
-            get: { deleteError != nil },
-            set: { if !$0 { deleteError = nil } }
-        )) {
-            Button("OK", role: .cancel) { deleteError = nil }
-        } message: {
-            Text(deleteError ?? "")
+    }
+
+    private var recipeList: some View {
+        List {
+            ForEach(recipes) { recipe in
+                NavigationLink(destination: RecipeDetailView(
+                    recipeId: recipe.id,
+                    recipeTitle: recipe.dishName
+                )) {
+                    RecipeRow(recipe: recipe)
+                }
+            }
+            .onDelete(perform: canDeleteFromList ? handleDelete : nil)
         }
-        .task { await load() }
-        .onAppear { Task { await load() } }
+        .listStyle(.plain)
+        .refreshable { await load() }
     }
 
     // MARK: - Empty state
