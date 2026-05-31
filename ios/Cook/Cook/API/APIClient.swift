@@ -187,7 +187,7 @@ final class APIClient {
         var req = makeRequest("/cooking-log/\(recipeId)")
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        req.httpBody = try JSONEncoder().encode(["servings": servings, "remove_from_planner": true])
+        req.httpBody = try JSONSerialization.data(withJSONObject: ["servings": servings, "remove_from_planner": true] as [String: Any])
         return try await send(req, as: CookingLogEntry.self)
     }
 
