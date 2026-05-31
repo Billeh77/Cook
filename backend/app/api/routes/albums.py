@@ -20,7 +20,7 @@ class AlbumOut(BaseModel):
     id: str
     name: str
     recipe_count: int
-    cover_url: str | None
+    cover_urls: list[str]   # up to 4 thumbnails, most-recently-added first
     created_at: str
 
 
@@ -185,16 +185,22 @@ def remove_recipe_from_album(
 # ── Helper ─────────────────────────────────────────────────────────────────────
 
 def _album_out(album: Album, session: Session) -> AlbumOut:
-    ars = session.exec(select(AlbumRecipe).where(AlbumRecipe.album_id == album.id)).all()
-    cover_url = None
-    if ars:
-        latest_ar = max(ars, key=lambda x: x.added_at)
-        recipe = session.get(Recipe, latest_ar.recipe_id)
-        cover_url = recipe.thumbnail_url if recipe else None
+    ars = session.exec(
+        select(AlbumRecipe)
+        .where(AlbumRecipe.album_id == album.id)
+        .order_by(AlbumRecipe.added_at.desc())
+    ).all()
+    cover_urls: list[str] = []
+    for ar in ars:
+        if len(cover_urls) >= 4:
+            break
+        recipe = session.get(Recipe, ar.recipe_id)
+        if recipe and recipe.thumbnail_url:
+            cover_urls.append(recipe.thumbnail_url)
     return AlbumOut(
         id=str(album.id),
         name=album.name,
         recipe_count=len(ars),
-        cover_url=cover_url,
+        cover_urls=cover_urls,
         created_at=album.created_at.isoformat(),
     )

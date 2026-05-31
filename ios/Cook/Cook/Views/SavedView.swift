@@ -23,7 +23,7 @@ struct SavedView: View {
                                 AlbumGridCell(
                                     name: "All",
                                     count: allRecipes.count,
-                                    coverURL: allRecipes.first?.thumbnailURL,
+                                    coverURLs: allRecipes.prefix(4).compactMap { $0.thumbnailURL },
                                     systemIcon: "photo.on.rectangle",
                                     iconColor: .orange
                                 )
@@ -35,7 +35,7 @@ struct SavedView: View {
                                 AlbumGridCell(
                                     name: "Favorites",
                                     count: favoriteRecipes.count,
-                                    coverURL: favoriteRecipes.first?.thumbnailURL,
+                                    coverURLs: favoriteRecipes.prefix(4).compactMap { $0.thumbnailURL },
                                     systemIcon: "heart.fill",
                                     iconColor: .red
                                 )
@@ -48,7 +48,7 @@ struct SavedView: View {
                                     AlbumGridCell(
                                         name: album.name,
                                         count: album.recipeCount,
-                                        coverURL: album.coverURL,
+                                        coverURLs: album.coverURLs,
                                         systemIcon: "rectangle.stack",
                                         iconColor: .orange
                                     )
@@ -123,28 +123,21 @@ struct SavedView: View {
 struct AlbumGridCell: View {
     let name: String
     let count: Int
-    let coverURL: String?
+    let coverURLs: [String]   // up to 4
     var systemIcon: String = "photo.on.rectangle"
     var iconColor: Color = .orange
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // Square thumbnail
-            ZStack {
-                if let urlStr = coverURL, let url = URL(string: urlStr) {
-                    CachedAsyncImage(url: url) { img in
-                        img.resizable().scaledToFill()
-                    } placeholder: {
-                        placeholderView
-                    }
-                } else {
-                    placeholderView
-                }
+            // Force a perfect square using GeometryReader, then clip
+            GeometryReader { geo in
+                let size = geo.size.width
+                thumbnailGrid(size: size)
+                    .frame(width: size, height: size)
             }
             .aspectRatio(1, contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-            // Name + count
             Text(name)
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.primary)
@@ -155,13 +148,66 @@ struct AlbumGridCell: View {
         }
     }
 
-    private var placeholderView: some View {
+    @ViewBuilder
+    private func thumbnailGrid(size: CGFloat) -> some View {
+        let urls = coverURLs.prefix(4).compactMap { URL(string: $0) }
+        let gap: CGFloat = 2
+        let half = (size - gap) / 2
+
+        switch urls.count {
+        case 0:
+            placeholder(width: size, height: size)
+
+        case 1:
+            thumb(url: urls[0], width: size, height: size)
+
+        case 2:
+            HStack(spacing: gap) {
+                thumb(url: urls[0], width: half, height: size)
+                thumb(url: urls[1], width: half, height: size)
+            }
+
+        case 3:
+            VStack(spacing: gap) {
+                HStack(spacing: gap) {
+                    thumb(url: urls[0], width: half, height: half)
+                    thumb(url: urls[1], width: half, height: half)
+                }
+                thumb(url: urls[2], width: size, height: half)
+            }
+
+        default: // 4
+            VStack(spacing: gap) {
+                HStack(spacing: gap) {
+                    thumb(url: urls[0], width: half, height: half)
+                    thumb(url: urls[1], width: half, height: half)
+                }
+                HStack(spacing: gap) {
+                    thumb(url: urls[2], width: half, height: half)
+                    thumb(url: urls[3], width: half, height: half)
+                }
+            }
+        }
+    }
+
+    private func thumb(url: URL, width: CGFloat, height: CGFloat) -> some View {
+        CachedAsyncImage(url: url) { img in
+            img.resizable().scaledToFill()
+        } placeholder: {
+            Color(.systemGray5)
+        }
+        .frame(width: width, height: height)
+        .clipped()
+    }
+
+    private func placeholder(width: CGFloat, height: CGFloat) -> some View {
         ZStack {
             Color(.systemGray5)
             Image(systemName: systemIcon)
                 .font(.system(size: 32))
                 .foregroundStyle(iconColor.opacity(0.5))
         }
+        .frame(width: width, height: height)
     }
 }
 

@@ -44,13 +44,13 @@ struct AlbumItem: Codable, Identifiable {
     let id: String
     let name: String
     let recipeCount: Int
-    let coverURL: String?
+    let coverURLs: [String]   // up to 4 thumbnails
     let createdAt: String
 
     enum CodingKeys: String, CodingKey {
         case id, name
         case recipeCount = "recipe_count"
-        case coverURL    = "cover_url"
+        case coverURLs   = "cover_urls"
         case createdAt   = "created_at"
     }
 }
