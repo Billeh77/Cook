@@ -67,8 +67,8 @@ struct AlbumDetailView: View {
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if isCustom {
-                ToolbarItem(placement: .navigationBarTrailing) {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                if isCustom {
                     Button { showAddSheet = true } label: {
                         Image(systemName: "plus")
                     }
