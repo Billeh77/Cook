@@ -38,12 +38,6 @@ struct RecipesListView: View {
                             .font(.headline.bold())
                     }
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: loadRecipes) {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .tint(.orange)
-                }
             }
             .refreshable { loadRecipes() }
             .alert("Delete failed", isPresented: Binding(

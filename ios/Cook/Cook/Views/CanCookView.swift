@@ -63,12 +63,6 @@ struct CanCookView: View {
                             .font(.headline.bold())
                     }
                 }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button { Task { await load() } } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .tint(.orange)
-                }
             }
             .task { await load() }
             .onAppear { Task { await load() } }
@@ -189,7 +183,9 @@ struct CanCookView: View {
 
     private func load() async {
         isLoading = true
-        items = (try? await APIClient.shared.getCookability()) ?? []
+        if let fetched = try? await APIClient.shared.getCookability() {
+            items = fetched
+        }
         // Only auto-select on first load — never reset the tab the user is on
         if !hasSetInitialTab {
             if !canCook.isEmpty          { selectedTab = 0 }
@@ -233,17 +229,17 @@ struct VerticalRecipeCard: View {
                     if item.missingCount > 0 {
                         HStack(spacing: 4) {
                             Image(systemName: "cart.badge.plus")
-                                .font(.system(size: 9, weight: .bold))
+                                .font(.system(size: 11, weight: .bold))
                             if item.missingCount <= 3 {
-                                Text(item.missingIngredients.joined(separator: ", "))
-                                    .font(.system(size: 10, weight: .semibold))
+                                Text("Missing \(item.missingIngredients.joined(separator: ", "))")
+                                    .font(.system(size: 11, weight: .semibold))
                                     .lineLimit(2)
                             } else {
                                 Text("Missing \(item.missingCount) ingredients")
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .font(.system(size: 11, weight: .semibold))
                             }
                         }
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.red)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 5)
                         .background(.black.opacity(0.5), in: Capsule())
