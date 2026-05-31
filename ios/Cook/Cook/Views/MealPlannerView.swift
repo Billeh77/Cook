@@ -1,85 +1,91 @@
 import SwiftUI
 
+// MARK: - Active sheet discriminator
+
+private enum ActiveSheet: Identifiable {
+    case addMeals
+    case cookConfirm(PlannedMealItem)
+
+    var id: String {
+        switch self {
+        case .addMeals:             return "addMeals"
+        case .cookConfirm(let m):   return "cook-\(m.id)"
+        }
+    }
+}
+
+// MARK: - Meal planner view
+
 struct MealPlannerView: View {
     @State private var planned: [PlannedMealItem] = []
     @State private var history: [CookingLogEntry] = []
     @State private var isLoading = false
-    @State private var showAddSheet = false
-
-    // Cook confirmation state
-    @State private var cookingMeal: PlannedMealItem?
-    @State private var servingsInput = 2
-    @State private var showCookConfirm = false
+    @State private var activeSheet: ActiveSheet?
 
     var body: some View {
         ScrollView(showsIndicators: false) {
-            LazyVStack(alignment: .leading, spacing: 0, pinnedViews: .sectionHeaders) {
+            VStack(alignment: .leading, spacing: 20) {
 
-                // ── Up Next ──────────────────────────────────────────────────
-                Section {
-                    if isLoading && planned.isEmpty {
-                        ProgressView().tint(.orange)
-                            .frame(maxWidth: .infinity, minHeight: 80)
-                    } else if planned.isEmpty {
-                        plannerEmptyState
-                    } else {
-                        VStack(spacing: 0) {
-                            ForEach(planned) { meal in
-                                PlannerRow(meal: meal) {
-                                    cookingMeal = meal
-                                    servingsInput = 2
-                                    showCookConfirm = true
-                                }
-                                if meal.id != planned.last?.id { Divider().padding(.leading, 70) }
-                            }
-                        }
-                        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .padding(.horizontal, 16)
-                    }
-                } header: {
-                    sectionHeader(title: "Up Next", count: planned.count) {
-                        Button { showAddSheet = true } label: {
-                            Image(systemName: "plus.circle.fill")
-                                .font(.title3)
-                                .foregroundStyle(.orange)
-                        }
+                // ── Up Next ───────────────────────────────────────────────────
+                sectionHeader(title: "Up Next", count: planned.count) {
+                    Button { activeSheet = .addMeals } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.title3)
+                            .foregroundStyle(.orange)
                     }
                 }
 
-                // ── History ──────────────────────────────────────────────────
-                if !history.isEmpty {
-                    Section {
-                        VStack(spacing: 0) {
-                            ForEach(history) { entry in
-                                HistoryRow(entry: entry)
-                                if entry.id != history.last?.id { Divider().padding(.leading, 70) }
+                if isLoading && planned.isEmpty {
+                    ProgressView().tint(.orange)
+                        .frame(maxWidth: .infinity, minHeight: 80)
+                } else if planned.isEmpty {
+                    plannerEmptyState
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(planned) { meal in
+                            PlannerRow(meal: meal) {
+                                activeSheet = .cookConfirm(meal)
+                            }
+                            if meal.id != planned.last?.id {
+                                Divider().padding(.leading, 70)
                             }
                         }
-                        .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .padding(.horizontal, 16)
-                    } header: {
-                        sectionHeader(title: "Cooked", count: history.count)
                     }
+                    .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .padding(.horizontal, 16)
+                }
+
+                // ── History ───────────────────────────────────────────────────
+                if !history.isEmpty {
+                    sectionHeader(title: "Cooked", count: history.count)
+
+                    VStack(spacing: 0) {
+                        ForEach(history) { entry in
+                            HistoryRow(entry: entry)
+                            if entry.id != history.last?.id {
+                                Divider().padding(.leading, 70)
+                            }
+                        }
+                    }
+                    .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .padding(.horizontal, 16)
                 }
 
                 Spacer().frame(height: 32)
             }
+            .padding(.top, 8)
         }
         .refreshable { await load() }
         .task { await load() }
-        .sheet(isPresented: $showAddSheet, onDismiss: { Task { await loadPlanned() } }) {
-            AddToPlannerSheet(existingIds: Set(planned.map { $0.recipeId }))
-        }
-        .sheet(isPresented: $showCookConfirm) {
-            if let meal = cookingMeal {
-                ServingsSheet(
-                    mealName: meal.dishName,
-                    servings: $servingsInput
-                ) {
-                    showCookConfirm = false
-                    Task { await markCooked(meal: meal, servings: servingsInput) }
-                } onCancel: {
-                    showCookConfirm = false
+        // Single sheet driven by the enum — no competing presenters
+        .sheet(item: $activeSheet, onDismiss: { Task { await loadPlanned() } }) { sheet in
+            switch sheet {
+            case .addMeals:
+                AddToPlannerSheet(existingIds: Set(planned.map { $0.recipeId }))
+            case .cookConfirm(let meal):
+                ServingsSheet(mealName: meal.dishName) { servings in
+                    activeSheet = nil
+                    Task { await markCooked(meal: meal, servings: servings) }
                 }
             }
         }
@@ -106,8 +112,7 @@ struct MealPlannerView: View {
             trailing()
         }
         .padding(.horizontal, 20)
-        .padding(.vertical, 10)
-        .background(.background)
+        .padding(.vertical, 4)
     }
 
     // MARK: - Empty state
@@ -123,9 +128,7 @@ struct MealPlannerView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button {
-                showAddSheet = true
-            } label: {
+            Button { activeSheet = .addMeals } label: {
                 Label("Add Meals", systemImage: "plus")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
@@ -156,13 +159,10 @@ struct MealPlannerView: View {
     }
 
     private func markCooked(meal: PlannedMealItem, servings: Int) async {
-        // Optimistically remove from planner
         planned.removeAll { $0.id == meal.id }
-
         if let entry = try? await APIClient.shared.logCooked(recipeId: meal.recipeId, servings: servings) {
             history.insert(entry, at: 0)
         } else {
-            // Revert if API call failed
             if let p = try? await APIClient.shared.getPlannedMeals() { planned = p }
         }
     }
@@ -176,7 +176,6 @@ private struct PlannerRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            // Thumbnail
             Group {
                 if let urlStr = meal.thumbnailURL, let url = URL(string: urlStr) {
                     CachedAsyncImage(url: url) { img in
@@ -203,7 +202,6 @@ private struct PlannerRow: View {
 
             Spacer()
 
-            // Check button
             Button(action: onCheck) {
                 Image(systemName: "circle")
                     .font(.title2)
@@ -265,13 +263,14 @@ private struct HistoryRow: View {
     }
 }
 
-// MARK: - Servings confirmation sheet
+// MARK: - Servings confirmation sheet (self-contained state)
 
 private struct ServingsSheet: View {
     let mealName: String
-    @Binding var servings: Int
-    let onConfirm: () -> Void
-    let onCancel: () -> Void
+    let onConfirm: (Int) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var servings = 2
 
     var body: some View {
         NavigationStack {
@@ -291,10 +290,10 @@ private struct ServingsSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", action: onCancel)
+                    Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { onConfirm() }
+                    Button("Done") { onConfirm(servings) }
                         .tint(.orange)
                 }
             }
@@ -306,7 +305,7 @@ private struct ServingsSheet: View {
 // MARK: - Add to planner sheet
 
 struct AddToPlannerSheet: View {
-    let existingIds: Set<String>   // recipe IDs already in planner
+    let existingIds: Set<String>
 
     @Environment(\.dismiss) private var dismiss
     @State private var allRecipes: [RecipeListItem] = []
