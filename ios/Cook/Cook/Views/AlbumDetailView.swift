@@ -94,7 +94,7 @@ struct AlbumDetailView: View {
                     RecipeRow(recipe: recipe)
                 }
             }
-            .onDelete(perform: canDeleteFromList ? handleDelete : nil)
+            .onDelete(perform: canDeleteFromList ? { handleDelete(at: $0) } : nil)
         }
         .listStyle(.plain)
         .refreshable { await load() }
