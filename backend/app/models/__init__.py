@@ -75,6 +75,26 @@ class AlbumRecipe(SQLModel, table=True):
     added_at: datetime = Field(default_factory=_now)
 
 
+class PlannedMeal(SQLModel, table=True):
+    __tablename__ = "planned_meals"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: str = Field(index=True)
+    recipe_id: uuid.UUID = Field(foreign_key="recipes.id")
+    added_at: datetime = Field(default_factory=_now)
+
+
+class CookingLog(SQLModel, table=True):
+    __tablename__ = "cooking_logs"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: str = Field(index=True)
+    recipe_id: uuid.UUID = Field(foreign_key="recipes.id")
+    dish_name: str                                    # denormalised — survives recipe deletion
+    cooked_at: datetime = Field(default_factory=_now)
+    servings: int = Field(default=1)
+
+
 class GroceryListItem(SQLModel, table=True):
     __tablename__ = "grocery_list_items"
 

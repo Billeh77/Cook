@@ -1,6 +1,29 @@
 import SwiftUI
 
+// SavedView: standalone wrapper (kept for any direct use)
 struct SavedView: View {
+    var body: some View {
+        NavigationStack {
+            SavedAlbumsContent()
+                .navigationTitle("Saved")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .principal) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "bookmark.circle.fill")
+                                .foregroundStyle(.orange)
+                            Text("Saved")
+                                .font(.headline.bold())
+                        }
+                    }
+                }
+        }
+    }
+}
+
+// MARK: - Album grid content (embeddable — works inside any NavigationStack)
+
+struct SavedAlbumsContent: View {
     @State private var allRecipes: [RecipeListItem] = []
     @State private var albums: [AlbumItem] = []
     @State private var isLoading = false
@@ -10,88 +33,74 @@ struct SavedView: View {
     private let columns = [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)]
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if isLoading && allRecipes.isEmpty {
-                    ProgressView("Loading…").tint(.orange)
-                } else {
-                    ScrollView(showsIndicators: false) {
-                        LazyVGrid(columns: columns, spacing: 20) {
+        Group {
+            if isLoading && allRecipes.isEmpty {
+                ProgressView("Loading…").tint(.orange)
+            } else {
+                ScrollView(showsIndicators: false) {
+                    LazyVGrid(columns: columns, spacing: 20) {
 
-                            // ── Virtual: All ──────────────────────────────────
-                            NavigationLink(destination: AlbumDetailView(kind: .all)) {
+                        // ── Virtual: All ──────────────────────────────────
+                        NavigationLink(destination: AlbumDetailView(kind: .all)) {
+                            AlbumGridCell(
+                                name: "All",
+                                count: allRecipes.count,
+                                coverURLs: allRecipes.prefix(4).compactMap { $0.thumbnailURL },
+                                systemIcon: "photo.on.rectangle",
+                                iconColor: .orange
+                            )
+                        }
+                        .buttonStyle(.plain)
+
+                        // ── Virtual: Favorites ────────────────────────────
+                        NavigationLink(destination: AlbumDetailView(kind: .favorites)) {
+                            AlbumGridCell(
+                                name: "Favorites",
+                                count: favoriteRecipes.count,
+                                coverURLs: favoriteRecipes.prefix(4).compactMap { $0.thumbnailURL },
+                                systemIcon: "heart.fill",
+                                iconColor: .red
+                            )
+                        }
+                        .buttonStyle(.plain)
+
+                        // ── Custom albums ─────────────────────────────────
+                        ForEach(albums) { album in
+                            NavigationLink(destination: AlbumDetailView(kind: .custom(id: album.id, name: album.name))) {
                                 AlbumGridCell(
-                                    name: "All",
-                                    count: allRecipes.count,
-                                    coverURLs: allRecipes.prefix(4).compactMap { $0.thumbnailURL },
-                                    systemIcon: "photo.on.rectangle",
+                                    name: album.name,
+                                    count: album.recipeCount,
+                                    coverURLs: album.coverURLs,
+                                    systemIcon: "rectangle.stack",
                                     iconColor: .orange
                                 )
                             }
                             .buttonStyle(.plain)
-
-                            // ── Virtual: Favorites ────────────────────────────
-                            NavigationLink(destination: AlbumDetailView(kind: .favorites)) {
-                                AlbumGridCell(
-                                    name: "Favorites",
-                                    count: favoriteRecipes.count,
-                                    coverURLs: favoriteRecipes.prefix(4).compactMap { $0.thumbnailURL },
-                                    systemIcon: "heart.fill",
-                                    iconColor: .red
-                                )
-                            }
-                            .buttonStyle(.plain)
-
-                            // ── Custom albums ─────────────────────────────────
-                            ForEach(albums) { album in
-                                NavigationLink(destination: AlbumDetailView(kind: .custom(id: album.id, name: album.name))) {
-                                    AlbumGridCell(
-                                        name: album.name,
-                                        count: album.recipeCount,
-                                        coverURLs: album.coverURLs,
-                                        systemIcon: "rectangle.stack",
-                                        iconColor: .orange
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                                .contextMenu {
-                                    Button(role: .destructive) {
-                                        Task { await deleteAlbum(album) }
-                                    } label: {
-                                        Label("Delete Album", systemImage: "trash")
-                                    }
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    Task { await deleteAlbum(album) }
+                                } label: {
+                                    Label("Delete Album", systemImage: "trash")
                                 }
                             }
-
-                            // ── Create album ──────────────────────────────────
-                            Button { showCreateSheet = true } label: {
-                                NewAlbumCell()
-                            }
-                            .buttonStyle(.plain)
                         }
-                        .padding(16)
+
+                        // ── Create album ──────────────────────────────────
+                        Button { showCreateSheet = true } label: {
+                            NewAlbumCell()
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .refreshable { await load() }
+                    .padding(16)
                 }
+                .refreshable { await load() }
             }
-            .navigationTitle("Saved")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "bookmark.circle.fill")
-                            .foregroundStyle(.orange)
-                        Text("Saved")
-                            .font(.headline.bold())
-                    }
-                }
-            }
-            .task { await load() }
-            .onAppear { Task { await load() } }
-            .sheet(isPresented: $showCreateSheet) {
-                CreateAlbumSheet { name in
-                    await createAlbum(name: name)
-                }
+        }
+        .task { await load() }
+        .onAppear { Task { await load() } }
+        .sheet(isPresented: $showCreateSheet) {
+            CreateAlbumSheet { name in
+                await createAlbum(name: name)
             }
         }
     }

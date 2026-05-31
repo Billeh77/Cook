@@ -203,6 +203,62 @@ struct InventoryItem: Codable, Identifiable {
     }
 }
 
+// MARK: - Planned meal
+
+struct PlannedMealItem: Codable, Identifiable {
+    let id: String
+    let recipeId: String
+    let dishName: String
+    let thumbnailURL: String?
+    let platform: String
+    let addedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, platform
+        case recipeId     = "recipe_id"
+        case dishName     = "dish_name"
+        case thumbnailURL = "thumbnail_url"
+        case addedAt      = "added_at"
+    }
+}
+
+// MARK: - Cooking log entry
+
+struct CookingLogEntry: Codable, Identifiable {
+    let id: String
+    let recipeId: String
+    let dishName: String
+    let cookedAt: String
+    let servings: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id, servings
+        case recipeId = "recipe_id"
+        case dishName = "dish_name"
+        case cookedAt = "cooked_at"
+    }
+}
+
+// MARK: - Kitchen stats
+
+struct KitchenStats: Codable {
+    let recipesThisWeek: Int
+    let servingsThisWeek: Int
+    let plannedCount: Int
+    let savedRecipes: Int
+    let pantryItems: Int
+    let totalCookedAllTime: Int
+
+    enum CodingKeys: String, CodingKey {
+        case recipesThisWeek    = "recipes_cooked_this_week"
+        case servingsThisWeek   = "servings_this_week"
+        case plannedCount       = "planned_count"
+        case savedRecipes       = "saved_recipes"
+        case pantryItems        = "pantry_items"
+        case totalCookedAllTime = "total_cooked_all_time"
+    }
+}
+
 // MARK: - Grocery list
 
 struct GroceryListItem: Codable, Identifiable {

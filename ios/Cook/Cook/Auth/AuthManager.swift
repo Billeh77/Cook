@@ -1,4 +1,5 @@
 import Foundation
+internal import Combine
 import Supabase
 
 /// Central auth state. Owned by CookApp, injected as @EnvironmentObject.
@@ -74,5 +75,36 @@ final class AuthManager: ObservableObject {
 
     var accessToken: String? {
         appGroup.string(forKey: Self.tokenKey)
+    }
+
+    // MARK: - User info
+
+    /// First name extracted from Google OAuth metadata, or email prefix as fallback.
+    var firstName: String {
+        if let meta = supabase.auth.currentUser?.userMetadata {
+            // Google sends "full_name" or "name"
+            for key in ["full_name", "name"] {
+                if let raw = meta[key],
+                   case let .string(name) = raw,
+                   !name.isEmpty {
+                    return name.components(separatedBy: " ").first ?? name
+                }
+            }
+        }
+        if let email = supabase.auth.currentUser?.email {
+            return email.components(separatedBy: "@").first?.capitalized ?? "Chef"
+        }
+        return "Chef"
+    }
+
+    /// Google avatar URL from OAuth metadata, if available.
+    var avatarURL: URL? {
+        if let meta = supabase.auth.currentUser?.userMetadata,
+           let raw = meta["avatar_url"],
+           case let .string(urlStr) = raw,
+           let url = URL(string: urlStr) {
+            return url
+        }
+        return nil
     }
 }

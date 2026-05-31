@@ -15,9 +15,9 @@ struct ContentView: View {
             InventoryView()
                 .tabItem { Label("Pantry", systemImage: "archivebox.fill") }
 
-            // Tab 4 — Saved Recipes (album grid)
-            SavedView()
-                .tabItem { Label("Saved", systemImage: "bookmark.fill") }
+            // Tab 4 — Profile (Stats, Planner, Saved albums)
+            ProfileView()
+                .tabItem { Label("Profile", systemImage: "person.crop.circle.fill") }
         }
         .tint(.orange)
     }

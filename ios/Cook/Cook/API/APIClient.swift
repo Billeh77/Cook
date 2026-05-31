@@ -159,6 +159,44 @@ final class APIClient {
         _ = try await perform(req)
     }
 
+    // MARK: - Planner
+
+    func getPlannedMeals() async throws -> [PlannedMealItem] {
+        try await send(makeRequest("/planner"), as: [PlannedMealItem].self)
+    }
+
+    func addToPlanner(recipeId: String) async throws {
+        var req = makeRequest("/planner/\(recipeId)")
+        req.httpMethod = "POST"
+        _ = try await perform(req)
+    }
+
+    func removeFromPlanner(recipeId: String) async throws {
+        var req = makeRequest("/planner/\(recipeId)")
+        req.httpMethod = "DELETE"
+        _ = try await perform(req)
+    }
+
+    // MARK: - Cooking log
+
+    func getCookingHistory() async throws -> [CookingLogEntry] {
+        try await send(makeRequest("/cooking-log"), as: [CookingLogEntry].self)
+    }
+
+    func logCooked(recipeId: String, servings: Int) async throws -> CookingLogEntry {
+        var req = makeRequest("/cooking-log/\(recipeId)")
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONEncoder().encode(["servings": servings, "remove_from_planner": true])
+        return try await send(req, as: CookingLogEntry.self)
+    }
+
+    // MARK: - Stats
+
+    func getKitchenStats() async throws -> KitchenStats {
+        try await send(makeRequest("/stats"), as: KitchenStats.self)
+    }
+
     // MARK: - Helpers
 
     private func makeRequest(_ path: String) -> URLRequest {
