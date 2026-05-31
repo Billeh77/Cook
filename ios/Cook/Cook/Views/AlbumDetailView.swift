@@ -36,11 +36,7 @@ struct AlbumDetailView: View {
         return nil
     }
 
-    private var canDeleteFromList: Bool {
-        // Favorites: no swipe-delete (unfavorite via detail view)
-        if case .favorites = kind { return false }
-        return true
-    }
+    private var canDeleteFromList: Bool { true }
 
     var body: some View {
         mainContent
@@ -170,7 +166,7 @@ struct AlbumDetailView: View {
                     case .custom(let albumId, _):
                         try await APIClient.shared.removeRecipeFromAlbum(albumId: albumId, recipeId: recipe.id)
                     case .favorites:
-                        break
+                        try await APIClient.shared.setFavorite(id: recipe.id, isFavorited: false)
                     }
                 } catch {
                     await MainActor.run {

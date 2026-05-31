@@ -12,6 +12,9 @@ struct RecipeDetailView: View {
     @State private var recipe: RecipeDetail?
     @State private var isLoading = true
     @State private var error: String?
+    @State private var isFavorited = false
+    @State private var showGroceryToast = false
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         Group {
@@ -25,19 +28,74 @@ struct RecipeDetailView: View {
                 }
                 .padding()
             } else if let recipe {
-                RecipeDetailContent(recipe: recipe, missingIngredients: missingIngredients)
+                RecipeDetailContent(
+                    recipe: recipe,
+                    missingIngredients: missingIngredients,
+                    isFavorited: isFavorited,
+                    onToggleFavorite: { toggleFavorite() },
+                    onDelete: { deleteRecipe() },
+                    onAddToGroceries: missingIngredients.isEmpty ? nil : { Task { await addToGroceries() } }
+                )
             }
         }
         .navigationTitle(recipeTitle)
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
+        .overlay(alignment: .bottom) {
+            if showGroceryToast {
+                HStack(spacing: 8) {
+                    Image(systemName: "cart.badge.checkmark")
+                        .font(.subheadline.weight(.semibold))
+                    Text("Missing items added to grocery list")
+                        .font(.subheadline.weight(.medium))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 12)
+                .background(.green.opacity(0.92), in: Capsule())
+                .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
+                .padding(.bottom, 28)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(duration: 0.35), value: showGroceryToast)
     }
 
     private func load() async {
         isLoading = true
-        do { recipe = try await APIClient.shared.getRecipe(id: recipeId) }
-        catch { self.error = error.localizedDescription }
+        do {
+            let r = try await APIClient.shared.getRecipe(id: recipeId)
+            recipe = r
+            isFavorited = r.isFavorited
+        } catch {
+            self.error = error.localizedDescription
+        }
         isLoading = false
+    }
+
+    private func toggleFavorite() {
+        isFavorited.toggle()
+        Task {
+            do {
+                try await APIClient.shared.setFavorite(id: recipeId, isFavorited: isFavorited)
+            } catch {
+                isFavorited.toggle() // revert on failure
+            }
+        }
+    }
+
+    private func deleteRecipe() {
+        Task {
+            try? await APIClient.shared.deleteRecipe(id: recipeId)
+            dismiss()
+        }
+    }
+
+    private func addToGroceries() async {
+        _ = try? await APIClient.shared.generateGroceryList(recipeIds: [recipeId])
+        withAnimation { showGroceryToast = true }
+        try? await Task.sleep(for: .seconds(2))
+        withAnimation { showGroceryToast = false }
     }
 }
 
@@ -46,12 +104,22 @@ struct RecipeDetailView: View {
 private struct RecipeDetailContent: View {
     let recipe: RecipeDetail
     let missingIngredients: [String]
+    let isFavorited: Bool
+    let onToggleFavorite: () -> Void
+    let onDelete: () -> Void
+    let onAddToGroceries: (() -> Void)?
 
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 20) {
 
-                VideoThumbnailCard(recipe: recipe)
+                VideoThumbnailCard(
+                    recipe: recipe,
+                    isFavorited: isFavorited,
+                    onToggleFavorite: onToggleFavorite,
+                    onDelete: onDelete,
+                    onAddToGroceries: onAddToGroceries
+                )
 
                 // Tags strip
                 if hasTags {
@@ -73,7 +141,6 @@ private struct RecipeDetailContent: View {
                         if let cal = recipe.calorieLevel { TagChip(calorieTag: cal) }
                         if let src = recipe.proteinSource { TagChip(proteinSourceTag: src) }
                     }
-                    .padding(.horizontal)
                 }
 
                 // Missing ingredients summary (only when we have that info)
@@ -85,7 +152,6 @@ private struct RecipeDetailContent: View {
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(.orange)
                     }
-                    .padding(.horizontal)
                 }
 
                 // Ingredients
@@ -144,10 +210,14 @@ private struct RecipeDetailContent: View {
     }
 }
 
-// MARK: - Square thumbnail card with platform watch button
+// MARK: - Square thumbnail card with platform watch button + action buttons
 
 private struct VideoThumbnailCard: View {
     let recipe: RecipeDetail
+    let isFavorited: Bool
+    let onToggleFavorite: () -> Void
+    let onDelete: () -> Void
+    let onAddToGroceries: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -158,46 +228,62 @@ private struct VideoThumbnailCard: View {
                     .padding(.horizontal, 4)
             }
 
-            ZStack(alignment: .bottomTrailing) {
-                Rectangle()
-                    .aspectRatio(1, contentMode: .fit)
-                    .overlay(
-                        Group {
-                            if let urlStr = recipe.thumbnailURL, let url = URL(string: urlStr) {
-                                CachedAsyncImage(url: url) { img in
-                                    img.resizable().scaledToFill()
-                                } placeholder: {
-                                    Color(.systemGray5)
-                                }
-                            } else {
-                                Color(.systemGray5)
-                                    .overlay(
-                                        Image(systemName: "film")
-                                            .font(.largeTitle)
-                                            .foregroundStyle(.tertiary)
-                                    )
+            Rectangle()
+                .aspectRatio(1, contentMode: .fit)
+                .overlay(thumbnailContent)
+                .clipped()
+                // Watch button — bottom right
+                .overlay(alignment: .bottomTrailing) {
+                    if let urlStr = recipe.sourceURL, let url = URL(string: urlStr) {
+                        Link(destination: url) {
+                            HStack(spacing: 5) {
+                                Text(watchLabel)
+                                    .font(.caption.weight(.semibold))
+                                Image(systemName: "arrow.up.right")
+                                    .font(.caption2.weight(.bold))
                             }
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(.black.opacity(0.55), in: Capsule())
                         }
-                    )
-                    .clipped()
-
-                if let urlStr = recipe.sourceURL, let url = URL(string: urlStr) {
-                    Link(destination: url) {
-                        HStack(spacing: 5) {
-                            Text(watchLabel)
-                                .font(.caption.weight(.semibold))
-                            Image(systemName: "arrow.up.right")
-                                .font(.caption2.weight(.bold))
+                        .padding(10)
+                    }
+                }
+                // Action buttons — bottom left
+                .overlay(alignment: .bottomLeading) {
+                    HStack(spacing: 10) {
+                        CardActionButton(
+                            systemImage: isFavorited ? "heart.fill" : "heart",
+                            color: isFavorited ? .red : .white,
+                            action: onToggleFavorite
+                        )
+                        if let onCart = onAddToGroceries {
+                            CardActionButton(systemImage: "cart.badge.plus", action: onCart)
                         }
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(.black.opacity(0.55), in: Capsule())
+                        CardActionButton(systemImage: "trash", action: onDelete)
                     }
                     .padding(10)
                 }
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+    }
+
+    @ViewBuilder
+    private var thumbnailContent: some View {
+        if let urlStr = recipe.thumbnailURL, let url = URL(string: urlStr) {
+            CachedAsyncImage(url: url) { img in
+                img.resizable().scaledToFill()
+            } placeholder: {
+                Color(.systemGray5)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        } else {
+            Color(.systemGray5)
+                .overlay(
+                    Image(systemName: "film")
+                        .font(.largeTitle)
+                        .foregroundStyle(.tertiary)
+                )
         }
     }
 
@@ -254,12 +340,12 @@ private struct IngredientDetailRow: View {
                     Text(ingredient.canonicalName).fontWeight(.medium)
 
                     if isMissing {
-                        Text("need")
+                        Text("missing")
                             .font(.caption2.weight(.semibold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(.orange, in: Capsule())
+                            .background(.red, in: Capsule())
                     }
                 }
                 .font(.subheadline)
