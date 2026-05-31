@@ -48,8 +48,8 @@ struct KitchenStatsView: View {
                 .padding(.leading, 2)
 
             LazyVGrid(
-                columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
-                spacing: 12
+                columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)],
+                spacing: 10
             ) {
                 ForEach(items) { item in
                     StatCard(item: item)
@@ -100,31 +100,31 @@ private struct StatCard: View {
     let item: Item
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 7) {
             Image(systemName: item.icon)
-                .font(.title3)
+                .font(.subheadline)
                 .foregroundStyle(item.color)
 
             Text(item.display)
-                .font(.system(size: 34, weight: .bold, design: .rounded))
+                .font(.system(size: 24, weight: .bold, design: .rounded))
                 .foregroundStyle(item.note != nil ? .secondary : .primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(item.label)
-                    .font(.caption)
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                 if let note = item.note {
                     Text(note)
-                        .font(.caption2)
+                        .font(.system(size: 9))
                         .foregroundStyle(.tertiary)
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(12)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
