@@ -123,6 +123,42 @@ final class APIClient {
         _ = try await perform(req)
     }
 
+    // MARK: - Albums
+
+    func getAlbums() async throws -> [AlbumItem] {
+        try await send(makeRequest("/albums"), as: [AlbumItem].self)
+    }
+
+    func createAlbum(name: String) async throws -> AlbumItem {
+        var req = makeRequest("/albums")
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONEncoder().encode(["name": name])
+        return try await send(req, as: AlbumItem.self)
+    }
+
+    func deleteAlbum(id: String) async throws {
+        var req = makeRequest("/albums/\(id)")
+        req.httpMethod = "DELETE"
+        _ = try await perform(req)
+    }
+
+    func getAlbumRecipes(id: String) async throws -> [RecipeListItem] {
+        try await send(makeRequest("/albums/\(id)/recipes"), as: [RecipeListItem].self)
+    }
+
+    func addRecipeToAlbum(albumId: String, recipeId: String) async throws {
+        var req = makeRequest("/albums/\(albumId)/recipes/\(recipeId)")
+        req.httpMethod = "POST"
+        _ = try await perform(req)
+    }
+
+    func removeRecipeFromAlbum(albumId: String, recipeId: String) async throws {
+        var req = makeRequest("/albums/\(albumId)/recipes/\(recipeId)")
+        req.httpMethod = "DELETE"
+        _ = try await perform(req)
+    }
+
     // MARK: - Helpers
 
     private func makeRequest(_ path: String) -> URLRequest {

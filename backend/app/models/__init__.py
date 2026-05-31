@@ -58,6 +58,23 @@ class InventoryItem(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=_now)
 
 
+class Album(SQLModel, table=True):
+    __tablename__ = "albums"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: str = Field(index=True)
+    name: str
+    created_at: datetime = Field(default_factory=_now)
+
+
+class AlbumRecipe(SQLModel, table=True):
+    __tablename__ = "album_recipes"
+
+    album_id: uuid.UUID = Field(foreign_key="albums.id", primary_key=True)
+    recipe_id: uuid.UUID = Field(foreign_key="recipes.id", primary_key=True)
+    added_at: datetime = Field(default_factory=_now)
+
+
 class GroceryListItem(SQLModel, table=True):
     __tablename__ = "grocery_list_items"
 

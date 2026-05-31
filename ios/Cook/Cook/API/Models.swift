@@ -10,6 +10,7 @@ struct RecipeListItem: Codable, Identifiable {
     let thumbnailURL: String?
     let platform: String
     let ingredientCount: Int
+    let isFavorited: Bool
     let createdAt: String
 
     enum CodingKeys: String, CodingKey {
@@ -19,7 +20,38 @@ struct RecipeListItem: Codable, Identifiable {
         case sourceURL       = "source_url"
         case thumbnailURL    = "thumbnail_url"
         case ingredientCount = "ingredient_count"
+        case isFavorited     = "is_favorited"
         case createdAt       = "created_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id             = try c.decode(String.self, forKey: .id)
+        dishName       = try c.decode(String.self, forKey: .dishName)
+        creatorName    = try c.decodeIfPresent(String.self, forKey: .creatorName)
+        sourceURL      = try c.decodeIfPresent(String.self, forKey: .sourceURL)
+        thumbnailURL   = try c.decodeIfPresent(String.self, forKey: .thumbnailURL)
+        platform       = try c.decode(String.self, forKey: .platform)
+        ingredientCount = try c.decode(Int.self, forKey: .ingredientCount)
+        isFavorited    = try c.decodeIfPresent(Bool.self, forKey: .isFavorited) ?? false
+        createdAt      = try c.decode(String.self, forKey: .createdAt)
+    }
+}
+
+// MARK: - Album
+
+struct AlbumItem: Codable, Identifiable {
+    let id: String
+    let name: String
+    let recipeCount: Int
+    let coverURL: String?
+    let createdAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, name
+        case recipeCount = "recipe_count"
+        case coverURL    = "cover_url"
+        case createdAt   = "created_at"
     }
 }
 
