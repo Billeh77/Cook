@@ -242,20 +242,29 @@ struct CookingLogEntry: Codable, Identifiable {
 // MARK: - Kitchen stats
 
 struct KitchenStats: Codable {
-    let recipesThisWeek: Int
-    let servingsThisWeek: Int
+    // This week
+    let mealsThisWeek: Int          // total servings
+    let recipesThisWeek: Int        // distinct cooking sessions
     let plannedCount: Int
-    let savedRecipes: Int
+    let ingredientsUsedThisWeek: Int
+    let moneySpentThisWeek: Double  // placeholder
+
+    // Your kitchen
     let pantryItems: Int
+    let uniqueRecipesCooked: Int
     let totalCookedAllTime: Int
+    let savedRecipes: Int
 
     enum CodingKeys: String, CodingKey {
-        case recipesThisWeek    = "recipes_cooked_this_week"
-        case servingsThisWeek   = "servings_this_week"
-        case plannedCount       = "planned_count"
-        case savedRecipes       = "saved_recipes"
-        case pantryItems        = "pantry_items"
-        case totalCookedAllTime = "total_cooked_all_time"
+        case mealsThisWeek          = "meals_cooked_this_week"
+        case recipesThisWeek        = "recipes_cooked_this_week"
+        case plannedCount           = "planned_count"
+        case ingredientsUsedThisWeek = "ingredients_used_this_week"
+        case moneySpentThisWeek     = "money_spent_this_week"
+        case pantryItems            = "pantry_items"
+        case uniqueRecipesCooked    = "unique_recipes_cooked"
+        case totalCookedAllTime     = "total_cooked_all_time"
+        case savedRecipes           = "saved_recipes"
     }
 }
 

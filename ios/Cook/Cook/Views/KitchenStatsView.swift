@@ -11,16 +11,21 @@ struct KitchenStatsView: View {
                     .frame(maxWidth: .infinity, minHeight: 200)
             } else if let s = stats {
                 VStack(alignment: .leading, spacing: 24) {
+
                     statSection("This Week", items: [
-                        StatItem("Meals Cooked",   value: s.recipesThisWeek,   icon: "flame.fill",         color: .orange),
-                        StatItem("Servings Made",  value: s.servingsThisWeek,  icon: "person.2.fill",       color: .purple),
-                        StatItem("Meals Planned",  value: s.plannedCount,      icon: "checklist",           color: .blue),
-                        StatItem("Recipes Saved",  value: s.savedRecipes,      icon: "bookmark.fill",       color: .indigo),
+                        StatCard.Item(label: "Meals Cooked",       display: "\(s.mealsThisWeek)",             icon: "flame.fill",         color: .orange),
+                        StatCard.Item(label: "Recipes Cooked",     display: "\(s.recipesThisWeek)",           icon: "fork.knife",          color: .red),
+                        StatCard.Item(label: "Meals Planned",      display: "\(s.plannedCount)",              icon: "checklist",           color: .blue),
+                        StatCard.Item(label: "Ingredients Used",   display: "\(s.ingredientsUsedThisWeek)",   icon: "leaf.fill",           color: .green),
+                        StatCard.Item(label: "Money Spent",        display: "$0",                             icon: "dollarsign.circle.fill", color: .mint,
+                                      note: "Coming soon"),
                     ])
 
                     statSection("Your Kitchen", items: [
-                        StatItem("Pantry Items",   value: s.pantryItems,        icon: "cabinet.fill",        color: .green),
-                        StatItem("All-Time Cooked", value: s.totalCookedAllTime, icon: "trophy.fill",         color: .yellow),
+                        StatCard.Item(label: "Pantry Items",       display: "\(s.pantryItems)",               icon: "cabinet.fill",        color: .brown),
+                        StatCard.Item(label: "Unique Recipes",     display: "\(s.uniqueRecipesCooked)",       icon: "star.fill",           color: .yellow),
+                        StatCard.Item(label: "All-Time Cooked",    display: "\(s.totalCookedAllTime)",        icon: "trophy.fill",         color: .orange),
+                        StatCard.Item(label: "Recipes Saved",      display: "\(s.savedRecipes)",              icon: "bookmark.fill",       color: .indigo),
                     ])
                 }
                 .padding(.horizontal, 16)
@@ -35,7 +40,7 @@ struct KitchenStatsView: View {
 
     // MARK: - Section builder
 
-    private func statSection(_ title: String, items: [StatItem]) -> some View {
+    private func statSection(_ title: String, items: [StatCard.Item]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title.uppercased())
                 .font(.caption.weight(.semibold))
@@ -75,34 +80,24 @@ struct KitchenStatsView: View {
 
     private func load() async {
         isLoading = true
-        if let s = try? await APIClient.shared.getKitchenStats() {
-            stats = s
-        }
+        if let s = try? await APIClient.shared.getKitchenStats() { stats = s }
         isLoading = false
     }
 }
 
-// MARK: - Stat item model
-
-struct StatItem: Identifiable {
-    let id = UUID()
-    let label: String
-    let value: Int
-    let icon: String
-    let color: Color
-
-    init(_ label: String, value: Int, icon: String, color: Color) {
-        self.label = label
-        self.value = value
-        self.icon  = icon
-        self.color = color
-    }
-}
-
-// MARK: - Stat card view
+// MARK: - Stat card
 
 private struct StatCard: View {
-    let item: StatItem
+    struct Item: Identifiable {
+        let id = UUID()
+        let label: String
+        let display: String     // formatted value to show (number or "$0" etc.)
+        let icon: String
+        let color: Color
+        var note: String? = nil // optional small note e.g. "Coming soon"
+    }
+
+    let item: Item
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -110,16 +105,23 @@ private struct StatCard: View {
                 .font(.title3)
                 .foregroundStyle(item.color)
 
-            Text("\(item.value)")
+            Text(item.display)
                 .font(.system(size: 34, weight: .bold, design: .rounded))
-                .foregroundStyle(.primary)
+                .foregroundStyle(item.note != nil ? .secondary : .primary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .minimumScaleFactor(0.6)
 
-            Text(item.label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.label)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                if let note = item.note {
+                    Text(note)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
