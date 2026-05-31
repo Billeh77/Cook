@@ -87,10 +87,10 @@ struct MealPlannerView: View {
 
     // MARK: - Section header
 
-    private func sectionHeader(
+    private func sectionHeader<T: View>(
         title: String,
         count: Int,
-        trailing: (() -> some View)? = nil
+        @ViewBuilder trailing: () -> T = { EmptyView() }
     ) -> some View {
         HStack {
             Text(title.uppercased())
@@ -103,7 +103,7 @@ struct MealPlannerView: View {
                 .padding(.vertical, 2)
                 .background(.orange, in: Capsule())
             Spacer()
-            trailing?()
+            trailing()
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 10)
