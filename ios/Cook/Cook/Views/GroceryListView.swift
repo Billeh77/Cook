@@ -29,6 +29,18 @@ struct GroceryListView: View {
             .sorted { $0.dishName < $1.dishName }
     }
 
+    /// How many unlockable recipes each grocery item appears in as a missing ingredient.
+    /// e.g. { "eggs": 3, "milk": 1 }
+    private var ingredientRecipeCount: [String: Int] {
+        var counts: [String: Int] = [:]
+        for recipe in unlockedRecipes {
+            for ingredient in recipe.missingIngredients {
+                counts[ingredient.lowercased(), default: 0] += 1
+            }
+        }
+        return counts
+    }
+
     var body: some View {
         NavigationStack {
             Group {
@@ -115,7 +127,10 @@ struct GroceryListView: View {
             ForEach(categories, id: \.0) { category, catItems in
                 Section(categoryLabel(category)) {
                     ForEach(catItems) { item in
-                        GroceryRow(item: item) { await toggle(item) }
+                        GroceryRow(
+                            item: item,
+                            recipeCount: ingredientRecipeCount[item.canonicalName.lowercased()] ?? 0
+                        ) { await toggle(item) }
                     }
                     .onDelete { offsets in deleteItems(catItems, at: offsets) }
                 }
@@ -189,6 +204,7 @@ struct GroceryListView: View {
 
 private struct GroceryRow: View {
     let item: GroceryListItem
+    let recipeCount: Int
     let onToggle: () async -> Void
 
     var body: some View {
@@ -203,6 +219,21 @@ private struct GroceryRow: View {
                     .foregroundStyle(item.checked ? .secondary : .primary)
 
                 Spacer()
+
+                // Recipe unlock count badge — only shown when this item
+                // contributes to at least one unlockable recipe
+                if recipeCount > 0 && !item.checked {
+                    HStack(spacing: 3) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 9, weight: .bold))
+                        Text("\(recipeCount)")
+                            .font(.caption2.weight(.bold))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(.orange, in: Capsule())
+                }
             }
             .contentShape(Rectangle())
         }
