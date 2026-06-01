@@ -179,8 +179,8 @@ final class APIClient {
 
     // MARK: - Cooking log
 
-    func getCookingHistory() async throws -> [CookingLogEntry] {
-        try await send(makeRequest("/cooking-log"), as: [CookingLogEntry].self)
+    func getCookingHistory(days: Int = 7) async throws -> CookingHistoryPage {
+        try await send(makeRequest("/cooking-log?days=\(days)"), as: CookingHistoryPage.self)
     }
 
     func logCooked(recipeId: String, servings: Int) async throws -> CookingLogEntry {

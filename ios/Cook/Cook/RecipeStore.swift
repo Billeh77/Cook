@@ -12,6 +12,11 @@ final class RecipeStore: ObservableObject {
     @Published var plannedRecipeIds: Set<String> = []
     @Published var history: [CookingLogEntry] = []
 
+    // Pagination for cooking history
+    @Published var historyHasMore: Bool = false
+    @Published var historyDaysLoaded: Int = 7
+    @Published var historyIsLoadingMore: Bool = false
+
     // MARK: - Derived
 
     /// Planned recipes backed by the authoritative cookability data.
@@ -24,12 +29,17 @@ final class RecipeStore: ObservableObject {
 
     @MainActor
     func load() async {
+        // Reset to first page on a fresh full load (pull-to-refresh)
+        historyDaysLoaded = 7
         async let c = try? APIClient.shared.getCookability()
         async let p = try? APIClient.shared.getPlannedMeals()
-        async let h = try? APIClient.shared.getCookingHistory()
+        async let h = try? APIClient.shared.getCookingHistory(days: 7)
         if let items   = await c { cookabilityItems = items }
         if let planned = await p { plannedRecipeIds = Set(planned.map { $0.recipeId }) }
-        if let hist    = await h { history = hist }
+        if let page    = await h {
+            history = page.entries
+            historyHasMore = page.hasMore
+        }
     }
 
     @MainActor
@@ -41,7 +51,23 @@ final class RecipeStore: ObservableObject {
 
     @MainActor
     func reloadHistory() async {
-        if let h = try? await APIClient.shared.getCookingHistory() { history = h }
+        if let page = try? await APIClient.shared.getCookingHistory(days: historyDaysLoaded) {
+            history = page.entries
+            historyHasMore = page.hasMore
+        }
+    }
+
+    /// Loads the next 3 weeks of history on top of whatever is already loaded.
+    @MainActor
+    func loadMoreHistory() async {
+        guard !historyIsLoadingMore else { return }
+        historyIsLoadingMore = true
+        historyDaysLoaded += 21
+        if let page = try? await APIClient.shared.getCookingHistory(days: historyDaysLoaded) {
+            history = page.entries
+            historyHasMore = page.hasMore
+        }
+        historyIsLoadingMore = false
     }
 
     // MARK: - Planner mutations

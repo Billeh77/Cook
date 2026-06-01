@@ -1,5 +1,6 @@
 import uuid as _uuid
-from fastapi import APIRouter, HTTPException, Depends
+from datetime import datetime, timedelta, timezone
+from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
@@ -26,18 +27,35 @@ class CookingLogOut(BaseModel):
     thumbnail_url: str | None = None
 
 
+class CookingHistoryPage(BaseModel):
+    entries: list[CookingLogOut]
+    has_more: bool
+
+
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
-@router.get("", response_model=list[CookingLogOut])
+@router.get("", response_model=CookingHistoryPage)
 def get_cooking_history(
+    days: int = Query(7, ge=1, description="Return entries from the last N days"),
     session: Session = Depends(get_session),
     user_id: str = Depends(get_current_user),
 ):
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
     logs = session.exec(
         select(CookingLog)
         .where(CookingLog.user_id == user_id)
+        .where(CookingLog.cooked_at >= cutoff)
         .order_by(CookingLog.cooked_at.desc())
     ).all()
+
+    # Check whether any entries exist before the current window
+    has_more = session.exec(
+        select(CookingLog)
+        .where(CookingLog.user_id == user_id)
+        .where(CookingLog.cooked_at < cutoff)
+    ).first() is not None
+
     result = []
     for l in logs:
         recipe = session.get(Recipe, l.recipe_id)
@@ -49,7 +67,8 @@ def get_cooking_history(
             servings=l.servings,
             thumbnail_url=recipe.thumbnail_url if recipe else None,
         ))
-    return result
+
+    return CookingHistoryPage(entries=result, has_more=has_more)
 
 
 @router.post("/{recipe_id}", response_model=CookingLogOut, status_code=201)

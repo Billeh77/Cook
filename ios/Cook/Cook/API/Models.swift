@@ -318,6 +318,18 @@ struct CookingLogEntry: Codable, Identifiable {
     }
 }
 
+// MARK: - Cooking history page (paginated)
+
+struct CookingHistoryPage: Decodable {
+    let entries: [CookingLogEntry]
+    let hasMore: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case entries
+        case hasMore = "has_more"
+    }
+}
+
 // MARK: - Kitchen stats
 
 struct KitchenStats: Codable {
