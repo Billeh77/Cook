@@ -7,8 +7,8 @@ struct ProfileView: View {
     @State private var stats: KitchenStats?
     @State private var showAvatarEditor = false
 
-    private let tabTitles = ["Planner", "Saved"]
-    private let tabIcons  = ["calendar", "bookmark.fill"]
+    private let tabTitles = ["Planner", "Cooked", "Saved"]
+    private let tabIcons  = ["calendar", "flame.fill", "bookmark.fill"]
 
     var body: some View {
         NavigationStack {
@@ -19,8 +19,10 @@ struct ProfileView: View {
                 TabView(selection: $selectedTab) {
                     MealPlannerView()
                         .tag(0)
-                    SavedAlbumsContent()
+                    CookedView()
                         .tag(1)
+                    SavedAlbumsContent()
+                        .tag(2)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
             }
@@ -139,7 +141,7 @@ struct ProfileView: View {
 
     private var topTabBar: some View {
         HStack(spacing: 0) {
-            ForEach(0..<2, id: \.self) { i in
+            ForEach(0..<3, id: \.self) { i in
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) { selectedTab = i }
                 } label: {

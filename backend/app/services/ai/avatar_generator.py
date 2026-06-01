@@ -33,9 +33,13 @@ async def generate_chef_avatar(image_bytes: bytes) -> bytes:
 
     client = replicate.Client(api_token=settings.replicate_api_token)
 
+    # Pin to the specific version hash — without it Replicate returns 404 because
+    # the model has no "default" deployment configured.
+    MODEL = "fofr/face-to-many:a07f252abbbd832009640b27f063ea52d87d7a23a185ca165bec23b5adc8deaf"
+
     # use_file_output=False → output is a plain list of URL strings (no FileOutput wrapping)
     output = await client.async_run(
-        "fofr/face-to-many",
+        MODEL,
         input={
             "image": data_uri,
             "style": "Pixar",
