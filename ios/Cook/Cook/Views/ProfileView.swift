@@ -5,8 +5,10 @@ import SwiftUI
 struct ProfileView: View {
     @State private var selectedTab = 0
     @State private var stats: KitchenStats?
+    @State private var showAvatarEditor = false
 
     private let tabTitles = ["Planner", "Saved"]
+    private let tabIcons  = ["calendar", "bookmark.fill"]
 
     var body: some View {
         NavigationStack {
@@ -40,11 +42,6 @@ struct ProfileView: View {
                     .foregroundStyle(.primary)
             }
 
-            // Thin separator
-            Rectangle()
-                .fill(.secondary.opacity(0.18))
-                .frame(width: 1, height: 72)
-
             // ── Stats ─────────────────────────────────────────────────────────
             if let s = stats {
                 statsPanel(s)
@@ -53,7 +50,7 @@ struct ProfileView: View {
                     .redacted(reason: .placeholder)
             }
         }
-        .padding(.horizontal, 24)
+        .padding(.horizontal, 20)
         .padding(.vertical, 18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.background)
@@ -62,27 +59,31 @@ struct ProfileView: View {
     // MARK: - Minimalist stats (2 × 2, no cards)
 
     private func statsPanel(_ s: KitchenStats) -> some View {
-        Grid(alignment: .leading, horizontalSpacing: 22, verticalSpacing: 12) {
+        Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 5) {
             GridRow {
-                statItem(value: "\(s.mealsThisWeek)",      label: "meals this week", icon: "flame.fill",    color: .orange)
+                statItem(value: "\(s.mealsThisWeek)",      label: "meals cooked this week", icon: "flame.fill",    color: .orange)
+            }
+            GridRow {
                 statItem(value: "\(s.savedRecipes)",       label: "recipes saved",    icon: "bookmark.fill", color: .indigo)
             }
             GridRow {
-                statItem(value: "\(s.uniqueRecipesCooked)", label: "cooked recipes",  icon: "star.fill",     color: .yellow)
-                statItem(value: "\(s.totalCookedAllTime)",  label: "all-time cooked", icon: "trophy.fill",   color: .orange)
+                statItem(value: "\(s.totalCookedAllTime)",  label: "cooking sessions", icon: "trophy.fill",   color: .orange)
+            }
+            GridRow {
+                statItem(value: "\(s.uniqueRecipesCooked)", label: "unique recipes learned",  icon: "star.fill",     color: .yellow)
             }
         }
     }
 
     private func statItem(value: String, label: String, icon: String, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(value)
-                .font(.system(size: 22, weight: .bold, design: .rounded))
-                .foregroundStyle(.primary)
-            HStack(spacing: 3) {
+            HStack(spacing: 6) {
                 Image(systemName: icon)
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(color)
+                Text(value)
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .foregroundStyle(.primary)
                 Text(label)
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)
@@ -94,27 +95,34 @@ struct ProfileView: View {
 
     @ViewBuilder
     private var avatarView: some View {
-        ZStack(alignment: .bottomTrailing) {
-            Group {
-                if let url = AuthManager.shared.avatarURL {
-                    CachedAsyncImage(url: url) { img in
-                        img.resizable().scaledToFill()
-                    } placeholder: {
+        Button { showAvatarEditor = true } label: {
+            ZStack(alignment: .bottomTrailing) {
+                Group {
+                    if let url = AuthManager.shared.avatarURL {
+                        CachedAsyncImage(url: url) { img in
+                            img.resizable().scaledToFill()
+                        } placeholder: {
+                            chefPlaceholder
+                        }
+                    } else {
                         chefPlaceholder
                     }
-                } else {
-                    chefPlaceholder
                 }
-            }
-            .frame(width: 72, height: 72)
-            .clipShape(Circle())
-            .overlay(Circle().stroke(.orange.opacity(0.35), lineWidth: 2.5))
+                .frame(width: 72, height: 72)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(.orange.opacity(0.35), lineWidth: 2.5))
 
-            Image(systemName: "fork.knife.circle.fill")
-                .font(.system(size: 20))
-                .foregroundStyle(.orange)
-                .background(Circle().fill(.background).padding(2))
-                .offset(x: 4, y: 4)
+                // Camera badge signals it's tappable
+                Image(systemName: "camera.circle.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(.orange)
+                    .background(Circle().fill(.background).padding(2))
+                    .offset(x: 4, y: 4)
+            }
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: $showAvatarEditor) {
+            AvatarEditorView()
         }
     }
 
@@ -136,9 +144,14 @@ struct ProfileView: View {
                     withAnimation(.easeInOut(duration: 0.2)) { selectedTab = i }
                 } label: {
                     VStack(spacing: 6) {
-                        Text(tabTitles[i])
-                            .font(.subheadline.weight(selectedTab == i ? .semibold : .regular))
-                            .foregroundStyle(selectedTab == i ? .primary : .secondary)
+                        HStack(spacing: 5) {
+                            Image(systemName: tabIcons[i])
+                                .font(.system(size: 13, weight: selectedTab == i ? .semibold : .regular))
+                                .foregroundStyle(selectedTab == i ? Color.orange : .secondary)
+                            Text(tabTitles[i])
+                                .font(.subheadline.weight(selectedTab == i ? .semibold : .regular))
+                                .foregroundStyle(selectedTab == i ? .primary : .secondary)
+                        }
                         Rectangle()
                             .frame(height: 2)
                             .foregroundStyle(selectedTab == i ? Color.orange : Color.clear)

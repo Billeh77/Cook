@@ -1,6 +1,7 @@
 import SwiftUI
 
-// SavedView: standalone wrapper (kept for any direct use)
+// MARK: - SavedView wrapper
+
 struct SavedView: View {
     var body: some View {
         NavigationStack {
@@ -21,50 +22,133 @@ struct SavedView: View {
     }
 }
 
-// MARK: - Album grid content (embeddable — works inside any NavigationStack)
+// MARK: - Smart album definition
+
+struct SmartAlbum: Identifiable {
+    let id: String
+    let name: String
+    let icon: String
+    let color: Color
+    let filter: (CookabilityItem) -> Bool
+}
+
+// Ordered list of all possible smart albums.
+// Only those with at least one matching recipe are shown.
+let allSmartAlbums: [SmartAlbum] = [
+    SmartAlbum(id: "breakfast", name: "Breakfast",    icon: "sunrise.fill",       color: .orange) {
+        $0.mealType == "breakfast"
+    },
+    SmartAlbum(id: "lunch",     name: "Lunch",        icon: "sun.max.fill",        color: .yellow) {
+        $0.mealType == "lunch"
+    },
+    SmartAlbum(id: "dinner",    name: "Dinner",       icon: "moon.stars.fill",     color: .indigo) {
+        $0.mealType == "dinner"
+    },
+    SmartAlbum(id: "easy",      name: "Easy Meals",   icon: "face.smiling.fill",   color: .green) {
+        $0.effort == "easy"
+            || ($0.timeMinutes.map { $0 <= 30 } ?? false)
+            || $0.ingredientCount < 10
+    },
+    SmartAlbum(id: "protein",   name: "High Protein", icon: "bolt.fill",           color: .green) {
+        $0.proteinLevel == "high"
+    },
+    SmartAlbum(id: "lowcal",    name: "Low Calories",      icon: "leaf.fill",           color: .mint) {
+        $0.calorieLevel == "low"
+    },
+    SmartAlbum(id: "under1hr",  name: "Under 1hr",    icon: "clock.fill",          color: .blue) {
+        $0.timeMinutes.map { $0 < 60 } ?? false
+    },
+    SmartAlbum(id: "chicken",   name: "Chicken",      icon: "bird.fill",           color: .orange) {
+        $0.proteinSource == "chicken"
+    },
+    SmartAlbum(id: "beef",      name: "Beef",         icon: "flame.fill",          color: .red) {
+        $0.proteinSource == "beef"
+    },
+    SmartAlbum(id: "seafood",   name: "Seafood",      icon: "water.waves",         color: .teal) {
+        $0.proteinSource == "seafood" || $0.proteinSource == "fish"
+    },
+    SmartAlbum(id: "vegan",     name: "Vegan",        icon: "leaf.fill",           color: .green) {
+        $0.proteinSource == "vegan"
+    },
+    SmartAlbum(id: "eggs",      name: "Eggs",         icon: "oval.fill",           color: .yellow) {
+        $0.proteinSource == "eggs"
+    },
+    SmartAlbum(id: "mealprep",  name: "Meal Prep",    icon: "tray.fill",           color: .purple) {
+        ($0.servings ?? 0) >= 6
+    },
+]
+
+// MARK: - Album grid content
 
 struct SavedAlbumsContent: View {
-    @State private var allRecipes: [RecipeListItem] = []
+    @EnvironmentObject var store: RecipeStore
+
     @State private var albums: [AlbumItem] = []
     @State private var isLoading = false
     @State private var showCreateSheet = false
 
-    private var favoriteRecipes: [RecipeListItem] { allRecipes.filter { $0.isFavorited } }
     private let columns = [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)]
+
+    // Precompute all smart album matches once
+    private var smartAlbumMatches: [(SmartAlbum, [CookabilityItem])] {
+        allSmartAlbums.compactMap { album in
+            let matches = store.cookabilityItems.filter(album.filter)
+            return matches.isEmpty ? nil : (album, matches)
+        }
+    }
+
+    private var allItems: [CookabilityItem] { store.cookabilityItems }
+    private var favoriteItems: [CookabilityItem] { store.cookabilityItems.filter { $0.isFavorited } }
 
     var body: some View {
         Group {
-            if isLoading && allRecipes.isEmpty {
+            if isLoading && store.cookabilityItems.isEmpty {
                 ProgressView("Loading…").tint(.orange)
             } else {
                 ScrollView(showsIndicators: false) {
                     LazyVGrid(columns: columns, spacing: 20) {
 
-                        // ── Virtual: All ──────────────────────────────────
+                        // ── All ───────────────────────────────────────────────
                         NavigationLink(destination: AlbumDetailView(kind: .all)) {
                             AlbumGridCell(
                                 name: "All",
-                                count: allRecipes.count,
-                                coverURLs: allRecipes.prefix(4).compactMap { $0.thumbnailURL },
+                                count: allItems.count,
+                                coverURLs: allItems.prefix(4).compactMap { $0.thumbnailURL },
                                 systemIcon: "photo.on.rectangle",
                                 iconColor: .orange
                             )
                         }
                         .buttonStyle(.plain)
 
-                        // ── Virtual: Favorites ────────────────────────────
-                        NavigationLink(destination: AlbumDetailView(kind: .favorites)) {
-                            AlbumGridCell(
-                                name: "Favorites",
-                                count: favoriteRecipes.count,
-                                coverURLs: favoriteRecipes.prefix(4).compactMap { $0.thumbnailURL },
-                                systemIcon: "heart.fill",
-                                iconColor: .red
-                            )
+                        // ── Favorites (only if non-empty) ─────────────────────
+                        if !favoriteItems.isEmpty {
+                            NavigationLink(destination: AlbumDetailView(kind: .favorites)) {
+                                AlbumGridCell(
+                                    name: "Favorites",
+                                    count: favoriteItems.count,
+                                    coverURLs: favoriteItems.prefix(4).compactMap { $0.thumbnailURL },
+                                    systemIcon: "heart.fill",
+                                    iconColor: .red
+                                )
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
 
-                        // ── Custom albums ─────────────────────────────────
+                        // ── Smart albums (non-empty only) ─────────────────────
+                        ForEach(smartAlbumMatches, id: \.0.id) { album, matches in
+                            NavigationLink(destination: SmartAlbumDetailView(album: album)) {
+                                AlbumGridCell(
+                                    name: album.name,
+                                    count: matches.count,
+                                    coverURLs: matches.prefix(4).compactMap { $0.thumbnailURL },
+                                    systemIcon: album.icon,
+                                    iconColor: album.color
+                                )
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        // ── Custom albums ─────────────────────────────────────
                         ForEach(albums) { album in
                             NavigationLink(destination: AlbumDetailView(kind: .custom(id: album.id, name: album.name))) {
                                 AlbumGridCell(
@@ -85,7 +169,7 @@ struct SavedAlbumsContent: View {
                             }
                         }
 
-                        // ── Create album ──────────────────────────────────
+                        // ── New album ─────────────────────────────────────────
                         Button { showCreateSheet = true } label: {
                             NewAlbumCell()
                         }
@@ -109,10 +193,7 @@ struct SavedAlbumsContent: View {
 
     private func load() async {
         isLoading = true
-        async let r = try? APIClient.shared.getRecipes()
-        async let a = try? APIClient.shared.getAlbums()
-        if let recipes = await r { allRecipes = recipes }
-        if let albs   = await a  { albums = albs }
+        if let albs = try? await APIClient.shared.getAlbums() { albums = albs }
         isLoading = false
     }
 
@@ -127,18 +208,114 @@ struct SavedAlbumsContent: View {
     }
 }
 
+// MARK: - Smart album detail view
+
+struct SmartAlbumDetailView: View {
+    let album: SmartAlbum
+    @EnvironmentObject var store: RecipeStore
+
+    private var recipes: [CookabilityItem] {
+        store.cookabilityItems.filter(album.filter)
+    }
+
+    var body: some View {
+        Group {
+            if recipes.isEmpty {
+                VStack(spacing: 16) {
+                    Image(systemName: album.icon)
+                        .font(.system(size: 52))
+                        .foregroundStyle(album.color.opacity(0.4))
+                    Text("No \(album.name) recipes yet")
+                        .font(.headline)
+                    Text("Add more recipes and they'll appear here automatically.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                List(recipes) { item in
+                    NavigationLink(destination: RecipeDetailView(
+                        recipeId: item.id,
+                        recipeTitle: item.dishName,
+                        missingIngredients: item.missingIngredients
+                    )) {
+                        SmartAlbumRow(item: item)
+                    }
+                }
+                .listStyle(.plain)
+            }
+        }
+        .navigationTitle(album.name)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+// MARK: - Smart album row (matches RecipeRow layout exactly)
+
+private struct SmartAlbumRow: View {
+    let item: CookabilityItem
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Thumbnail
+            Group {
+                if let urlStr = item.thumbnailURL, let url = URL(string: urlStr) {
+                    CachedAsyncImage(url: url) { img in
+                        img.resizable().scaledToFill()
+                    } placeholder: {
+                        placeholder
+                    }
+                } else {
+                    placeholder
+                }
+            }
+            .frame(width: 72, height: 72)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            // Text
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.dishName)
+                    .font(.headline)
+                    .lineLimit(2)
+
+                if let creator = item.creatorName {
+                    Text(creator)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Text("\(item.ingredientCount) ingredients")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var placeholder: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(.orange.opacity(0.12))
+            Image(systemName: "fork.knife")
+                .foregroundStyle(.orange)
+        }
+    }
+}
+
 // MARK: - Album grid cell
 
 struct AlbumGridCell: View {
     let name: String
     let count: Int
-    let coverURLs: [String]   // up to 4
+    let coverURLs: [String]
     var systemIcon: String = "photo.on.rectangle"
     var iconColor: Color = .orange
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // Force a perfect square using GeometryReader, then clip
             GeometryReader { geo in
                 let size = geo.size.width
                 thumbnailGrid(size: size)
@@ -166,16 +343,13 @@ struct AlbumGridCell: View {
         switch urls.count {
         case 0:
             placeholder(width: size, height: size)
-
         case 1:
             thumb(url: urls[0], width: size, height: size)
-
         case 2:
             HStack(spacing: gap) {
                 thumb(url: urls[0], width: half, height: size)
                 thumb(url: urls[1], width: half, height: size)
             }
-
         case 3:
             VStack(spacing: gap) {
                 HStack(spacing: gap) {
@@ -184,8 +358,7 @@ struct AlbumGridCell: View {
                 }
                 thumb(url: urls[2], width: size, height: half)
             }
-
-        default: // 4
+        default:
             VStack(spacing: gap) {
                 HStack(spacing: gap) {
                     thumb(url: urls[0], width: half, height: half)
@@ -229,11 +402,9 @@ private struct NewAlbumCell: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(Color(.systemGray6))
                     .aspectRatio(1, contentMode: .fit)
-                VStack(spacing: 6) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 28, weight: .medium))
-                        .foregroundStyle(.orange)
-                }
+                Image(systemName: "plus")
+                    .font(.system(size: 28, weight: .medium))
+                    .foregroundStyle(.orange)
             }
             Text("New Album")
                 .font(.subheadline.weight(.semibold))

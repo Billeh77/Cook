@@ -197,6 +197,38 @@ final class APIClient {
         try await send(makeRequest("/stats"), as: KitchenStats.self)
     }
 
+    // MARK: - Profile / Avatar
+
+    /// Uploads a JPEG photo and returns the URL of the AI-generated chef avatar.
+    /// Generation takes ~20–40 seconds — show a progress indicator on the call site.
+    func generateAvatar(imageData: Data) async throws -> URL {
+        let url = URL(string: base + "/profile/avatar")!
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.timeoutInterval = 120  // generation can take up to ~60 s + upload buffer
+        if let token = AuthManager.shared.accessToken {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let boundary = UUID().uuidString
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"avatar.jpg\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+        body.append(imageData)
+        body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+        req.httpBody = body
+
+        struct AvatarResponse: Decodable { let avatar_url: String }
+        let response = try await send(req, as: AvatarResponse.self)
+        guard let resultURL = URL(string: response.avatar_url) else {
+            throw APIError.decodingError(URLError(.badURL))
+        }
+        return resultURL
+    }
+
     // MARK: - Helpers
 
     private func makeRequest(_ path: String) -> URLRequest {

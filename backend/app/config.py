@@ -3,6 +3,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     anthropic_api_key: str = ""
+    replicate_api_token: str = ""
     database_url: str = "postgresql://postgres:postgres@localhost:5432/grocerylist"
     environment: str = "development"
     log_level: str = "INFO"

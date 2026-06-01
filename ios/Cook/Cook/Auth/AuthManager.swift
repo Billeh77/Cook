@@ -97,8 +97,24 @@ final class AuthManager: ObservableObject {
         return "Chef"
     }
 
-    /// Google avatar URL from OAuth metadata, if available.
+    // MARK: - Custom avatar (AI-generated, persisted across launches)
+
+    private static let customAvatarKey = "cook_custom_avatar_url"
+
+    /// Call after a successful avatar generation to persist and surface the new URL.
+    func setCustomAvatarURL(_ url: URL) {
+        UserDefaults.standard.set(url.absoluteString, forKey: Self.customAvatarKey)
+        objectWillChange.send()
+    }
+
+    /// AI-generated avatar takes priority over the Google OAuth avatar.
     var avatarURL: URL? {
+        // 1. AI-generated (stored in UserDefaults after generation)
+        if let stored = UserDefaults.standard.string(forKey: Self.customAvatarKey),
+           let url = URL(string: stored) {
+            return url
+        }
+        // 2. Google OAuth avatar from Supabase user metadata
         if let meta = supabase.auth.currentUser?.userMetadata,
            let raw = meta["avatar_url"],
            case let .string(urlStr) = raw,
@@ -106,5 +122,11 @@ final class AuthManager: ObservableObject {
             return url
         }
         return nil
+    }
+
+    /// Refreshes the Supabase session so updated user metadata propagates.
+    func refreshSession() async {
+        try? await supabase.auth.refreshSession()
+        objectWillChange.send()
     }
 }
