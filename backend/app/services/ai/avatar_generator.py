@@ -42,7 +42,7 @@ async def generate_chef_avatar(image_bytes: bytes) -> bytes:
         MODEL,
         input={
             "image": data_uri,
-            "style": "Pixar",
+            "style": "3D",
             "prompt": "cute chef wearing a white chef hat and apron, warm cozy kitchen background, soft lighting, friendly smile, high quality",
             "negative_prompt": "ugly, blurry, bad anatomy, distorted face, watermark",
             "number_of_outputs": 1,
