@@ -15,11 +15,12 @@ from app.config import settings
 
 # ── Replicate ──────────────────────────────────────────────────────────────────
 
-async def generate_chef_avatar(image_bytes: bytes) -> bytes:
+async def generate_chef_avatar(image_bytes: bytes, style: str = "Clay") -> bytes:
     """
-    Sends image_bytes to Replicate's fofr/face-to-many model (Pixar style)
+    Sends image_bytes to Replicate's fofr/face-to-many model with the given style
     and returns the generated image as bytes.
 
+    Valid styles: 3D | Emoji | Video game | Pixels | Clay | Toy
     Raises RuntimeError on any failure.
     """
     if not settings.replicate_api_token:
@@ -42,7 +43,7 @@ async def generate_chef_avatar(image_bytes: bytes) -> bytes:
         MODEL,
         input={
             "image": data_uri,
-            "style": "3D",
+            "style": style,
             "prompt": "cute chef wearing a white chef hat and apron, warm cozy kitchen background, soft lighting, friendly smile, high quality",
             "negative_prompt": "ugly, blurry, bad anatomy, distorted face, watermark",
             "number_of_outputs": 1,

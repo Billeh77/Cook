@@ -8,7 +8,7 @@ POST /profile/avatar
 
 Generation takes 20–40 seconds; the client should show a progress indicator.
 """
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, Form, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
 from app.api.dependencies import get_current_user
@@ -27,9 +27,13 @@ class AvatarResponse(BaseModel):
     avatar_url: str
 
 
+VALID_STYLES = {"3D", "Emoji", "Video game", "Pixels", "Clay", "Toy"}
+
+
 @router.post("/avatar", response_model=AvatarResponse)
 async def generate_avatar(
     file: UploadFile = File(..., description="JPEG or PNG photo of the user's face"),
+    style: str = Form("Clay", description="Avatar style: 3D | Emoji | Video game | Pixels | Clay | Toy"),
     user_id: str = Depends(get_current_user),
 ):
     """
@@ -40,6 +44,9 @@ async def generate_avatar(
     5. Return permanent URL
     """
     # 1. Validate
+    if style not in VALID_STYLES:
+        raise HTTPException(status_code=400, detail=f"Invalid style. Choose one of: {', '.join(sorted(VALID_STYLES))}")
+
     if file.content_type not in ("image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"):
         raise HTTPException(status_code=400, detail="File must be a JPEG, PNG, WEBP, or HEIC image")
 
@@ -51,7 +58,7 @@ async def generate_avatar(
 
     # 2. Generate via Replicate
     try:
-        generated_bytes = await generate_chef_avatar(image_bytes)
+        generated_bytes = await generate_chef_avatar(image_bytes, style=style)
     except Exception as e:
         detail = f"{type(e).__name__}: {e}"
         print(f"[profile/avatar] generation error: {detail}")
