@@ -27,7 +27,12 @@ class GenerateRequest(BaseModel):
 
 class CheckRequest(BaseModel):
     checked: bool
-    update_inventory: bool = True
+    update_inventory: bool = False
+
+
+class ManualAddRequest(BaseModel):
+    canonical_name: str
+    category: str = "other"
 
 
 @router.get("", response_model=list[GroceryListItemOut])
@@ -96,6 +101,74 @@ def generate_grocery_list(
         .order_by(GroceryListItem.category, GroceryListItem.canonical_name)
     ).all()
     return [_out(i) for i in all_items]
+
+
+@router.post("/items", response_model=GroceryListItemOut, status_code=201)
+def add_grocery_item(
+    body: ManualAddRequest,
+    session: Session = Depends(get_session),
+    user_id: str = Depends(get_current_user),
+):
+    """Manually add a single ingredient to the grocery list."""
+    name = body.canonical_name.strip().lower()
+    if not name:
+        raise HTTPException(status_code=400, detail="canonical_name is required")
+
+    # Don't duplicate unchecked items
+    existing = session.exec(
+        select(GroceryListItem).where(
+            GroceryListItem.user_id == user_id,
+            GroceryListItem.canonical_name == name,
+            GroceryListItem.checked == False,  # noqa: E712
+        )
+    ).first()
+    if existing:
+        return _out(existing)
+
+    item = GroceryListItem(
+        user_id=user_id,
+        canonical_name=name,
+        category=body.category,
+    )
+    session.add(item)
+    session.commit()
+    session.refresh(item)
+    return _out(item)
+
+
+@router.post("/add-to-pantry", status_code=204)
+def add_checked_to_pantry(
+    session: Session = Depends(get_session),
+    user_id: str = Depends(get_current_user),
+):
+    """Move all checked grocery items into the pantry (inventory) then delete them."""
+    checked_items = session.exec(
+        select(GroceryListItem).where(
+            GroceryListItem.user_id == user_id,
+            GroceryListItem.checked == True,  # noqa: E712
+        )
+    ).all()
+
+    for item in checked_items:
+        existing = session.exec(
+            select(InventoryItem).where(
+                InventoryItem.user_id == user_id,
+                InventoryItem.canonical_name == item.canonical_name,
+            )
+        ).first()
+        if existing:
+            existing.status = "in_stock"
+            existing.updated_at = datetime.now(timezone.utc)
+            session.add(existing)
+        else:
+            session.add(InventoryItem(
+                user_id=user_id,
+                canonical_name=item.canonical_name,
+                status="in_stock",
+            ))
+        session.delete(item)
+
+    session.commit()
 
 
 @router.patch("/items/{item_id}/check", response_model=GroceryListItemOut)
