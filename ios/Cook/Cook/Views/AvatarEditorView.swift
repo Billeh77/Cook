@@ -1,23 +1,6 @@
 import SwiftUI
 import PhotosUI
 
-// MARK: - Style options
-
-private struct AvatarStyle: Identifiable {
-    let id: String       // value sent to the API
-    let label: String
-    let emoji: String
-}
-
-private let avatarStyles: [AvatarStyle] = [
-    AvatarStyle(id: "Clay",       label: "Clay",       emoji: "🧸"),
-    AvatarStyle(id: "Toy",        label: "Toy",        emoji: "🪆"),
-    AvatarStyle(id: "Video game", label: "Video Game", emoji: "🎮"),
-    AvatarStyle(id: "3D",         label: "3D",         emoji: "✨"),
-    AvatarStyle(id: "Pixels",     label: "Pixel Art",  emoji: "🕹️"),
-    AvatarStyle(id: "Emoji",      label: "Emoji",      emoji: "😊"),
-]
-
 // MARK: - Avatar editor sheet
 
 struct AvatarEditorView: View {
@@ -28,9 +11,6 @@ struct AvatarEditorView: View {
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var showCamera = false
 
-    // Style selection
-    @State private var selectedStyle = "Clay"
-
     // Generation state
     @State private var isGenerating = false
     @State private var generatedURL: URL?
@@ -39,55 +19,11 @@ struct AvatarEditorView: View {
     var body: some View {
         NavigationStack {
             ScrollView(showsIndicators: false) {
-                VStack(spacing: 28) {
+                VStack(spacing: 32) {
 
                     // ── Current / generated avatar ─────────────────────────
                     avatarDisplay
                         .padding(.top, 24)
-
-                    // ── Style picker ──────────────────────────────────────
-                    if !isGenerating {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Avatar Style")
-                                .font(.subheadline.weight(.semibold))
-                                .padding(.horizontal, 24)
-
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 10) {
-                                    ForEach(avatarStyles) { style in
-                                        Button {
-                                            selectedStyle = style.id
-                                            // Clear previous result if style changes
-                                            generatedURL = nil
-                                            errorMessage = nil
-                                        } label: {
-                                            VStack(spacing: 5) {
-                                                Text(style.emoji)
-                                                    .font(.title2)
-                                                Text(style.label)
-                                                    .font(.caption.weight(.semibold))
-                                                    .foregroundStyle(selectedStyle == style.id ? .white : .primary)
-                                            }
-                                            .frame(width: 72, height: 64)
-                                            .background(
-                                                selectedStyle == style.id
-                                                    ? Color.orange
-                                                    : Color(.secondarySystemGroupedBackground)
-                                            )
-                                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                                    .stroke(selectedStyle == style.id ? Color.clear : Color(.separator).opacity(0.5), lineWidth: 1)
-                                            )
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
-                                .padding(.horizontal, 24)
-                                .padding(.vertical, 2)
-                            }
-                        }
-                    }
 
                     // ── Action buttons ────────────────────────────────────
                     if !isGenerating {
@@ -208,11 +144,11 @@ struct AvatarEditorView: View {
         }
 
         if generatedURL != nil {
-            Text("Your new chef avatar is ready!")
+            Text("Your chef avatar is ready!")
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.green)
         } else {
-            Text("Pick a style, then upload a photo\nto generate your AI chef avatar")
+            Text("Upload a selfie and we'll turn you\ninto an adorable clay chef 🧸")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -249,7 +185,7 @@ struct AvatarEditorView: View {
         generatedURL = nil
 
         do {
-            let url = try await APIClient.shared.generateAvatar(imageData: imageData, style: selectedStyle)
+            let url = try await APIClient.shared.generateAvatar(imageData: imageData)
             generatedURL = url
             auth.setCustomAvatarURL(url)
             Task { await auth.refreshSession() }

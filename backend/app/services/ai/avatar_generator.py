@@ -15,12 +15,11 @@ from app.config import settings
 
 # ── Replicate ──────────────────────────────────────────────────────────────────
 
-async def generate_chef_avatar(image_bytes: bytes, style: str = "Clay") -> bytes:
+async def generate_chef_avatar(image_bytes: bytes) -> bytes:
     """
-    Sends image_bytes to Replicate's fofr/face-to-many model with the given style
+    Sends image_bytes to Replicate's fofr/face-to-many model (Clay style)
     and returns the generated image as bytes.
 
-    Valid styles: 3D | Emoji | Video game | Pixels | Clay | Toy
     Raises RuntimeError on any failure.
     """
     if not settings.replicate_api_token:
@@ -43,13 +42,30 @@ async def generate_chef_avatar(image_bytes: bytes, style: str = "Clay") -> bytes
         MODEL,
         input={
             "image": data_uri,
-            "style": style,
-            "prompt": "cute chef wearing a white chef hat and apron, warm cozy kitchen background, soft lighting, friendly smile, high quality",
-            "negative_prompt": "ugly, blurry, bad anatomy, distorted face, watermark",
+            "style": "Clay",
+            "prompt": (
+                "an incredibly cute and adorable little clay chef, "
+                "wearing a fluffy white chef hat and a spotless white apron, "
+                "big warm friendly smile, rosy cheeks, "
+                "standing in a cozy charming kitchen, "
+                "colourful pots and pans hanging on the wall, "
+                "fresh vegetables and herbs on the wooden counter, "
+                "warm golden soft lighting, "
+                "heartwarming and delightful, chibi-style proportions, "
+                "highest quality claymation chef character"
+            ),
+            "negative_prompt": (
+                "ugly, deformed, blurry, bad anatomy, distorted face, "
+                "watermark, text, scary, dark, gloomy, creepy, realistic, "
+                "photograph, extra limbs, missing limbs, low quality, "
+                "no chef hat, no apron, outdoor, street, office"
+            ),
+            "prompt_strength": 8,        # default 4.5 — higher = prompt dominates more over face style
+            "denoising_strength": 0.75,  # default 0.65 — allows more creative transformation
             "number_of_outputs": 1,
             "number_of_images_per_pose": 1,
             "output_format": "jpg",
-            "output_quality": 90,
+            "output_quality": 95,
         },
         use_file_output=False,
     )

@@ -201,7 +201,7 @@ final class APIClient {
 
     /// Uploads a JPEG photo and returns the URL of the AI-generated chef avatar.
     /// Generation takes ~20–40 seconds — show a progress indicator on the call site.
-    func generateAvatar(imageData: Data, style: String = "Clay") async throws -> URL {
+    func generateAvatar(imageData: Data) async throws -> URL {
         let url = URL(string: base + "/profile/avatar")!
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -214,12 +214,6 @@ final class APIClient {
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
         var body = Data()
-        // Style field
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"style\"\r\n\r\n".data(using: .utf8)!)
-        body.append(style.data(using: .utf8)!)
-        body.append("\r\n".data(using: .utf8)!)
-        // Image file field
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"file\"; filename=\"avatar.jpg\"\r\n".data(using: .utf8)!)
         body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
