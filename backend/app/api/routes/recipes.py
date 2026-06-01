@@ -35,6 +35,7 @@ class RecipeOut(BaseModel):
     created_at: str
     steps: list[str] = []
     ingredients: list[IngredientOut] = []
+    meal_type: str | None = None
     servings: int | None = None
     effort: str | None = None
     time_minutes: int | None = None
@@ -54,6 +55,7 @@ class RecipeListItem(BaseModel):
     platform: str
     ingredient_count: int
     created_at: str
+    meal_type: str | None = None
     servings: int | None = None
     effort: str | None = None
     time_minutes: int | None = None
@@ -73,6 +75,7 @@ class CookabilityItem(BaseModel):
     platform: str
     ingredient_count: int
     created_at: str
+    meal_type: str | None = None
     servings: int | None = None
     effort: str | None = None
     time_minutes: int | None = None
@@ -131,6 +134,7 @@ def get_cookability(
             platform=r.platform,
             ingredient_count=len(ingredients),
             created_at=r.created_at.isoformat(),
+            meal_type=r.meal_type,
             servings=r.servings,
             effort=r.effort,
             time_minutes=r.time_minutes,
@@ -182,6 +186,7 @@ def get_recipe(
             )
             for i in ingredients
         ],
+        meal_type=recipe.meal_type,
         servings=recipe.servings,
         effort=recipe.effort,
         time_minutes=recipe.time_minutes,
@@ -247,6 +252,7 @@ def _list_item(r: Recipe, ingredient_count: int) -> RecipeListItem:
         source_url=r.source_url, thumbnail_url=r.thumbnail_url,
         platform=r.platform, ingredient_count=ingredient_count,
         created_at=r.created_at.isoformat(),
+        meal_type=r.meal_type,
         servings=r.servings, effort=r.effort, time_minutes=r.time_minutes,
         is_batch_prep=r.is_batch_prep or False, protein_level=r.protein_level,
         calorie_level=r.calorie_level, protein_source=r.protein_source,

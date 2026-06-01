@@ -25,6 +25,7 @@ class Recipe(SQLModel, table=True):
     confidence: float = 0.0
     created_at: datetime = Field(default_factory=_now)
     # Recipe tags — populated by LLM at ingest time, null for older recipes
+    meal_type: Optional[str] = None        # "breakfast" | "lunch" | "dinner" | "dessert"
     servings: Optional[int] = None
     effort: Optional[str] = None          # "easy" | "medium" | "hard"
     time_minutes: Optional[int] = None

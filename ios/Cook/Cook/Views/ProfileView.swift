@@ -4,7 +4,9 @@ import SwiftUI
 
 struct ProfileView: View {
     @State private var selectedTab = 0
-    private let tabTitles = ["Stats", "Planner", "Saved"]
+    @State private var stats: KitchenStats?
+
+    private let tabTitles = ["Planner", "Saved"]
 
     var body: some View {
         NavigationStack {
@@ -13,31 +15,79 @@ struct ProfileView: View {
                 topTabBar
                 Divider()
                 TabView(selection: $selectedTab) {
-                    KitchenStatsView()
-                        .tag(0)
                     MealPlannerView()
-                        .tag(1)
+                        .tag(0)
                     SavedAlbumsContent()
-                        .tag(2)
+                        .tag(1)
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
             }
             .toolbar(.hidden, for: .navigationBar)
+            .task { await loadStats() }
         }
     }
 
     // MARK: - Profile header
 
     private var profileHeader: some View {
-        VStack(spacing: 10) {
-            avatarView
-            Text("\(AuthManager.shared.firstName)'s Kitchen")
-                .font(.title2.bold())
+        HStack(alignment: .center, spacing: 28) {
+
+            // ── Identity ──────────────────────────────────────────────────────
+            VStack(alignment: .leading, spacing: 8) {
+                avatarView
+                Text("\(AuthManager.shared.firstName.prefix(1).uppercased() + AuthManager.shared.firstName.dropFirst())'s Kitchen")
+                    .font(.title3.bold())
+                    .foregroundStyle(.primary)
+            }
+
+            // Thin separator
+            Rectangle()
+                .fill(.secondary.opacity(0.18))
+                .frame(width: 1, height: 72)
+
+            // ── Stats ─────────────────────────────────────────────────────────
+            if let s = stats {
+                statsPanel(s)
+            } else {
+                statsPanel(.placeholder)
+                    .redacted(reason: .placeholder)
+            }
         }
-        .padding(.top, 16)
-        .padding(.bottom, 18)
-        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 18)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(.background)
+    }
+
+    // MARK: - Minimalist stats (2 × 2, no cards)
+
+    private func statsPanel(_ s: KitchenStats) -> some View {
+        Grid(alignment: .leading, horizontalSpacing: 22, verticalSpacing: 12) {
+            GridRow {
+                statItem(value: "\(s.mealsThisWeek)",      label: "meals this week", icon: "flame.fill",    color: .orange)
+                statItem(value: "\(s.savedRecipes)",       label: "recipes saved",    icon: "bookmark.fill", color: .indigo)
+            }
+            GridRow {
+                statItem(value: "\(s.uniqueRecipesCooked)", label: "cooked recipes",  icon: "star.fill",     color: .yellow)
+                statItem(value: "\(s.totalCookedAllTime)",  label: "all-time cooked", icon: "trophy.fill",   color: .orange)
+            }
+        }
+    }
+
+    private func statItem(value: String, label: String, icon: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(value)
+                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
+            HStack(spacing: 3) {
+                Image(systemName: icon)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(color)
+                Text(label)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 
     // MARK: - Avatar
@@ -56,13 +106,12 @@ struct ProfileView: View {
                     chefPlaceholder
                 }
             }
-            .frame(width: 90, height: 90)
+            .frame(width: 72, height: 72)
             .clipShape(Circle())
             .overlay(Circle().stroke(.orange.opacity(0.35), lineWidth: 2.5))
 
-            // Kitchen badge
             Image(systemName: "fork.knife.circle.fill")
-                .font(.system(size: 24))
+                .font(.system(size: 20))
                 .foregroundStyle(.orange)
                 .background(Circle().fill(.background).padding(2))
                 .offset(x: 4, y: 4)
@@ -73,16 +122,16 @@ struct ProfileView: View {
         ZStack {
             Color.orange.opacity(0.1)
             Image(systemName: "person.crop.circle.fill")
-                .font(.system(size: 54))
+                .font(.system(size: 44))
                 .foregroundStyle(.orange.opacity(0.45))
         }
     }
 
-    // MARK: - Top tab bar (same design as CanCookView)
+    // MARK: - Two-tab bar
 
     private var topTabBar: some View {
         HStack(spacing: 0) {
-            ForEach(0..<3, id: \.self) { i in
+            ForEach(0..<2, id: \.self) { i in
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) { selectedTab = i }
                 } label: {
@@ -102,4 +151,26 @@ struct ProfileView: View {
             }
         }
     }
+
+    // MARK: - Data
+
+    private func loadStats() async {
+        if let s = try? await APIClient.shared.getKitchenStats() { stats = s }
+    }
+}
+
+// MARK: - Placeholder for skeleton state
+
+private extension KitchenStats {
+    static let placeholder = KitchenStats(
+        mealsThisWeek: 12,
+        recipesThisWeek: 5,
+        plannedCount: 3,
+        ingredientsUsedThisWeek: 0,
+        moneySpentThisWeek: 0,
+        pantryItems: 0,
+        uniqueRecipesCooked: 47,
+        totalCookedAllTime: 89,
+        savedRecipes: 32
+    )
 }

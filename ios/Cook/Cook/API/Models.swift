@@ -87,6 +87,7 @@ struct RecipeDetail: Codable, Identifiable {
     let createdAt: String
     let steps: [String]
     let ingredients: [IngredientResponse]
+    let mealType: String?
     let servings: Int?
     let effort: String?
     let timeMinutes: Int?
@@ -104,6 +105,7 @@ struct RecipeDetail: Codable, Identifiable {
         case thumbnailURL = "thumbnail_url"
         case embedHTML    = "embed_html"
         case createdAt    = "created_at"
+        case mealType     = "meal_type"
         case servings, effort
         case timeMinutes  = "time_minutes"
         case isBatchPrep  = "is_batch_prep"
@@ -111,6 +113,30 @@ struct RecipeDetail: Codable, Identifiable {
         case calorieLevel = "calorie_level"
         case proteinSource = "protein_source"
         case isFavorited  = "is_favorited"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id            = try c.decode(String.self,              forKey: .id)
+        dishName      = try c.decode(String.self,              forKey: .dishName)
+        creatorName   = try c.decodeIfPresent(String.self,     forKey: .creatorName)
+        sourceURL     = try c.decodeIfPresent(String.self,     forKey: .sourceURL)
+        thumbnailURL  = try c.decodeIfPresent(String.self,     forKey: .thumbnailURL)
+        embedHTML     = try c.decodeIfPresent(String.self,     forKey: .embedHTML)
+        platform      = try c.decode(String.self,              forKey: .platform)
+        confidence    = try c.decode(Double.self,              forKey: .confidence)
+        createdAt     = try c.decode(String.self,              forKey: .createdAt)
+        steps         = try c.decodeIfPresent([String].self,   forKey: .steps)         ?? []
+        ingredients   = try c.decodeIfPresent([IngredientResponse].self, forKey: .ingredients) ?? []
+        mealType      = try c.decodeIfPresent(String.self,     forKey: .mealType)
+        servings      = try c.decodeIfPresent(Int.self,        forKey: .servings)
+        effort        = try c.decodeIfPresent(String.self,     forKey: .effort)
+        timeMinutes   = try c.decodeIfPresent(Int.self,        forKey: .timeMinutes)
+        isBatchPrep   = try c.decodeIfPresent(Bool.self,       forKey: .isBatchPrep)   ?? false
+        proteinLevel  = try c.decodeIfPresent(String.self,     forKey: .proteinLevel)
+        calorieLevel  = try c.decodeIfPresent(String.self,     forKey: .calorieLevel)
+        proteinSource = try c.decodeIfPresent(String.self,     forKey: .proteinSource)
+        isFavorited   = try c.decodeIfPresent(Bool.self,       forKey: .isFavorited)   ?? false
     }
 }
 
@@ -125,6 +151,7 @@ struct CookabilityItem: Codable, Identifiable {
     let platform: String
     let ingredientCount: Int
     let createdAt: String
+    let mealType: String?
     let servings: Int?
     let effort: String?
     let timeMinutes: Int?
@@ -144,6 +171,7 @@ struct CookabilityItem: Codable, Identifiable {
         case thumbnailURL      = "thumbnail_url"
         case ingredientCount   = "ingredient_count"
         case createdAt         = "created_at"
+        case mealType          = "meal_type"
         case timeMinutes       = "time_minutes"
         case isBatchPrep       = "is_batch_prep"
         case proteinLevel      = "protein_level"
@@ -152,6 +180,29 @@ struct CookabilityItem: Codable, Identifiable {
         case isFavorited       = "is_favorited"
         case missingCount      = "missing_count"
         case missingIngredients = "missing_ingredients"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id               = try c.decode(String.self,              forKey: .id)
+        dishName         = try c.decode(String.self,              forKey: .dishName)
+        creatorName      = try c.decodeIfPresent(String.self,     forKey: .creatorName)
+        sourceURL        = try c.decodeIfPresent(String.self,     forKey: .sourceURL)
+        thumbnailURL     = try c.decodeIfPresent(String.self,     forKey: .thumbnailURL)
+        platform         = try c.decode(String.self,              forKey: .platform)
+        ingredientCount  = try c.decode(Int.self,                 forKey: .ingredientCount)
+        createdAt        = try c.decode(String.self,              forKey: .createdAt)
+        mealType         = try c.decodeIfPresent(String.self,     forKey: .mealType)
+        servings         = try c.decodeIfPresent(Int.self,        forKey: .servings)
+        effort           = try c.decodeIfPresent(String.self,     forKey: .effort)
+        timeMinutes      = try c.decodeIfPresent(Int.self,        forKey: .timeMinutes)
+        isBatchPrep      = try c.decodeIfPresent(Bool.self,       forKey: .isBatchPrep)      ?? false
+        proteinLevel     = try c.decodeIfPresent(String.self,     forKey: .proteinLevel)
+        calorieLevel     = try c.decodeIfPresent(String.self,     forKey: .calorieLevel)
+        proteinSource    = try c.decodeIfPresent(String.self,     forKey: .proteinSource)
+        isFavorited      = try c.decodeIfPresent(Bool.self,       forKey: .isFavorited)      ?? false
+        missingCount     = try c.decodeIfPresent(Int.self,        forKey: .missingCount)     ?? 0
+        missingIngredients = try c.decodeIfPresent([String].self, forKey: .missingIngredients) ?? []
     }
 }
 
@@ -212,13 +263,29 @@ struct PlannedMealItem: Codable, Identifiable {
     let thumbnailURL: String?
     let platform: String
     let addedAt: String
+    let missingCount: Int
+    let missingIngredients: [String]   // up to 3 names
 
     enum CodingKeys: String, CodingKey {
         case id, platform
-        case recipeId     = "recipe_id"
-        case dishName     = "dish_name"
-        case thumbnailURL = "thumbnail_url"
-        case addedAt      = "added_at"
+        case recipeId            = "recipe_id"
+        case dishName            = "dish_name"
+        case thumbnailURL        = "thumbnail_url"
+        case addedAt             = "added_at"
+        case missingCount        = "missing_count"
+        case missingIngredients  = "missing_ingredients"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id                  = try c.decode(String.self,  forKey: .id)
+        recipeId            = try c.decode(String.self,  forKey: .recipeId)
+        dishName            = try c.decode(String.self,  forKey: .dishName)
+        thumbnailURL        = try c.decodeIfPresent(String.self,  forKey: .thumbnailURL)
+        platform            = try c.decode(String.self,  forKey: .platform)
+        addedAt             = try c.decode(String.self,  forKey: .addedAt)
+        missingCount        = try c.decodeIfPresent(Int.self,     forKey: .missingCount)       ?? 0
+        missingIngredients  = try c.decodeIfPresent([String].self, forKey: .missingIngredients) ?? []
     }
 }
 
@@ -230,12 +297,24 @@ struct CookingLogEntry: Codable, Identifiable {
     let dishName: String
     let cookedAt: String
     let servings: Int
+    let thumbnailURL: String?
 
     enum CodingKeys: String, CodingKey {
         case id, servings
-        case recipeId = "recipe_id"
-        case dishName = "dish_name"
-        case cookedAt = "cooked_at"
+        case recipeId     = "recipe_id"
+        case dishName     = "dish_name"
+        case cookedAt     = "cooked_at"
+        case thumbnailURL = "thumbnail_url"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id           = try c.decode(String.self, forKey: .id)
+        recipeId     = try c.decode(String.self, forKey: .recipeId)
+        dishName     = try c.decode(String.self, forKey: .dishName)
+        cookedAt     = try c.decode(String.self, forKey: .cookedAt)
+        servings     = try c.decode(Int.self,    forKey: .servings)
+        thumbnailURL = try c.decodeIfPresent(String.self, forKey: .thumbnailURL)
     }
 }
 

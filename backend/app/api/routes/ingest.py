@@ -89,6 +89,7 @@ async def ingest_link(
         raw_caption=raw.caption_text,
         steps=extraction.steps or [],
         confidence=extraction.confidence,
+        meal_type=extraction.meal_type,
         servings=extraction.servings,
         effort=extraction.effort,
         time_minutes=extraction.time_minutes,

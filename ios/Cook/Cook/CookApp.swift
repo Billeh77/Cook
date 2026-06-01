@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct CookApp: App {
     @ObservedObject private var auth = AuthManager.shared
+    @StateObject private var store = RecipeStore()
 
     var body: some Scene {
         WindowGroup {
@@ -13,6 +14,7 @@ struct CookApp: App {
                         .tint(.orange)
                 } else if auth.isAuthenticated {
                     ContentView()
+                        .environmentObject(store)
                 } else {
                     SignInView()
                 }

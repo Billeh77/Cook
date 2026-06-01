@@ -4,8 +4,9 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.db import get_session
-from app.models import PlannedMeal, Recipe
+from app.models import PlannedMeal, Recipe, Ingredient
 from app.api.dependencies import get_current_user
+from app.services.inventory import find_missing
 
 router = APIRouter()
 
@@ -19,6 +20,8 @@ class PlannedMealOut(BaseModel):
     thumbnail_url: str | None
     platform: str
     added_at: str
+    missing_count: int
+    missing_ingredients: list[str]   # up to 3 canonical names
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
@@ -38,6 +41,10 @@ def list_planned_meals(
         recipe = session.get(Recipe, m.recipe_id)
         if not recipe:
             continue
+        ingredients = session.exec(
+            select(Ingredient).where(Ingredient.recipe_id == m.recipe_id)
+        ).all()
+        missing = find_missing([i.canonical_name for i in ingredients], session, user_id)
         result.append(PlannedMealOut(
             id=str(m.id),
             recipe_id=str(m.recipe_id),
@@ -45,6 +52,8 @@ def list_planned_meals(
             thumbnail_url=recipe.thumbnail_url,
             platform=recipe.platform,
             added_at=m.added_at.isoformat(),
+            missing_count=len(missing),
+            missing_ingredients=missing[:3],
         ))
     return result
 

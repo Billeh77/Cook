@@ -9,12 +9,26 @@ struct RecipeDetailView: View {
     /// Passed from CanCookView; empty when opened from Saved tab.
     var missingIngredients: [String] = []
 
+    @EnvironmentObject var store: RecipeStore
     @State private var recipe: RecipeDetail?
     @State private var isLoading = true
     @State private var error: String?
     @State private var isFavorited = false
     @State private var showGroceryToast = false
+    @State private var showCookPlanDialog = false
+    @State private var showServingsSheet = false
+    @State private var actionToastMessage: String?
     @Environment(\.dismiss) private var dismiss
+
+    private var isPlanned: Bool {
+        store.plannedRecipeIds.contains(recipeId)
+    }
+
+    /// Missing count from the store if available, otherwise fall back to what was passed in.
+    private var missingCount: Int {
+        store.cookabilityItems.first { $0.id == recipeId }?.missingCount
+            ?? missingIngredients.count
+    }
 
     var body: some View {
         Group {
@@ -32,8 +46,9 @@ struct RecipeDetailView: View {
                     recipe: recipe,
                     missingIngredients: missingIngredients,
                     isFavorited: isFavorited,
+                    isPlanned: isPlanned,
                     onToggleFavorite: { toggleFavorite() },
-                    onDelete: { deleteRecipe() },
+                    onCookPlan: { showCookPlanDialog = true },
                     onAddToGroceries: missingIngredients.isEmpty ? nil : { Task { await addToGroceries() } }
                 )
             }
@@ -41,24 +56,89 @@ struct RecipeDetailView: View {
         .navigationTitle(recipeTitle)
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
-        .overlay(alignment: .bottom) {
-            if showGroceryToast {
-                HStack(spacing: 8) {
-                    Image(systemName: "cart.badge.checkmark")
-                        .font(.subheadline.weight(.semibold))
-                    Text("Missing items added to grocery list")
-                        .font(.subheadline.weight(.medium))
+        // ── Cook / Plan dialog ─────────────────────────────────────────────────
+        .confirmationDialog(
+            recipeTitle,
+            isPresented: $showCookPlanDialog,
+            titleVisibility: .visible
+        ) {
+            if isPlanned {
+                Button("Cook Now") { showServingsSheet = true }
+                Button("Remove from Plan", role: .destructive) {
+                    Task {
+                        await store.removeFromPlanner(id: recipeId)
+                        await showToast("Removed from your plan")
+                    }
                 }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 12)
-                .background(.green.opacity(0.92), in: Capsule())
-                .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
-                .padding(.bottom, 28)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else {
+                Button("Cook Now") { showServingsSheet = true }
+                Button("Add to Plan") {
+                    Task {
+                        await store.addToPlanner(id: recipeId)
+                        if missingCount > 0 {
+                            _ = try? await APIClient.shared.generateGroceryList(recipeIds: [recipeId])
+                            await showToast("Added to plan · missing items → grocery list")
+                        } else {
+                            await showToast("Added to your meal plan")
+                        }
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(isPlanned ? "This recipe is already in your plan." : "What would you like to do?")
+        }
+        // ── Servings sheet ─────────────────────────────────────────────────────
+        .sheet(isPresented: $showServingsSheet) {
+            DetailServingsSheet(mealName: recipeTitle) { servings in
+                showServingsSheet = false
+                Task {
+                    await store.markCooked(recipeId: recipeId, servings: servings)
+                    await showToast("Cooked! Added to your history 🎉")
+                }
             }
         }
+        // ── Toasts ─────────────────────────────────────────────────────────────
+        .overlay(alignment: .bottom) {
+            VStack(spacing: 10) {
+                if let msg = actionToastMessage {
+                    Text(msg)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 12)
+                        .background(.orange.opacity(0.92), in: Capsule())
+                        .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                if showGroceryToast {
+                    HStack(spacing: 8) {
+                        Image(systemName: "cart.badge.checkmark")
+                            .font(.subheadline.weight(.semibold))
+                        Text("Missing items added to grocery list")
+                            .font(.subheadline.weight(.medium))
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 12)
+                    .background(.green.opacity(0.92), in: Capsule())
+                    .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .padding(.bottom, 28)
+        }
         .animation(.spring(duration: 0.35), value: showGroceryToast)
+        .animation(.spring(duration: 0.35), value: actionToastMessage)
+    }
+
+    // MARK: - Helpers
+
+    @MainActor
+    private func showToast(_ message: String) async {
+        withAnimation { actionToastMessage = message }
+        try? await Task.sleep(for: .seconds(2))
+        withAnimation { actionToastMessage = nil }
     }
 
     private func load() async {
@@ -79,15 +159,8 @@ struct RecipeDetailView: View {
             do {
                 try await APIClient.shared.setFavorite(id: recipeId, isFavorited: isFavorited)
             } catch {
-                isFavorited.toggle() // revert on failure
+                isFavorited.toggle()
             }
-        }
-    }
-
-    private func deleteRecipe() {
-        Task {
-            try? await APIClient.shared.deleteRecipe(id: recipeId)
-            dismiss()
         }
     }
 
@@ -105,8 +178,9 @@ private struct RecipeDetailContent: View {
     let recipe: RecipeDetail
     let missingIngredients: [String]
     let isFavorited: Bool
+    let isPlanned: Bool
     let onToggleFavorite: () -> Void
-    let onDelete: () -> Void
+    let onCookPlan: () -> Void
     let onAddToGroceries: (() -> Void)?
 
     var body: some View {
@@ -116,15 +190,16 @@ private struct RecipeDetailContent: View {
                 VideoThumbnailCard(
                     recipe: recipe,
                     isFavorited: isFavorited,
+                    isPlanned: isPlanned,
                     onToggleFavorite: onToggleFavorite,
-                    onDelete: onDelete,
+                    onCookPlan: onCookPlan,
                     onAddToGroceries: onAddToGroceries
                 )
 
                 // Tags strip
                 if hasTags {
                     TagFlow(spacing: 6) {
-                        if let effort = recipe.effort { TagChip(effortTag: effort) }
+                        if let mt = recipe.mealType { TagChip(mealTypeTag: mt) }
                         if let mins = recipe.timeMinutes {
                             TagChip(text: timeLabel(mins), icon: "clock", color: .blue)
                         }
@@ -138,12 +213,11 @@ private struct RecipeDetailContent: View {
                         if let protein = recipe.proteinLevel, protein == "high" {
                             TagChip(text: "High protein", icon: "bolt.fill", color: .green)
                         }
-                        if let cal = recipe.calorieLevel { TagChip(calorieTag: cal) }
                         if let src = recipe.proteinSource { TagChip(proteinSourceTag: src) }
                     }
                 }
 
-                // Missing ingredients summary (only when we have that info)
+                // Missing ingredients summary
                 if !missingIngredients.isEmpty {
                     HStack(spacing: 6) {
                         Image(systemName: "cart.badge.plus")
@@ -201,8 +275,8 @@ private struct RecipeDetailContent: View {
     }
 
     private var hasTags: Bool {
-        recipe.effort != nil || recipe.timeMinutes != nil || recipe.servings != nil
-        || recipe.proteinLevel != nil || recipe.calorieLevel != nil || recipe.proteinSource != nil
+        recipe.mealType != nil || recipe.timeMinutes != nil || recipe.servings != nil
+        || recipe.proteinLevel == "high" || recipe.proteinSource != nil
     }
 
     private func timeLabel(_ mins: Int) -> String {
@@ -210,13 +284,14 @@ private struct RecipeDetailContent: View {
     }
 }
 
-// MARK: - Square thumbnail card with platform watch button + action buttons
+// MARK: - Thumbnail card with action buttons
 
 private struct VideoThumbnailCard: View {
     let recipe: RecipeDetail
     let isFavorited: Bool
+    let isPlanned: Bool
     let onToggleFavorite: () -> Void
-    let onDelete: () -> Void
+    let onCookPlan: () -> Void
     let onAddToGroceries: (() -> Void)?
 
     var body: some View {
@@ -232,8 +307,8 @@ private struct VideoThumbnailCard: View {
                 .aspectRatio(1, contentMode: .fit)
                 .overlay(thumbnailContent)
                 .clipped()
-                // Watch button — bottom right
-                .overlay(alignment: .bottomTrailing) {
+                // Watch button — bottom left
+                .overlay(alignment: .bottomLeading) {
                     if let urlStr = recipe.sourceURL, let url = URL(string: urlStr) {
                         Link(destination: url) {
                             HStack(spacing: 5) {
@@ -250,18 +325,27 @@ private struct VideoThumbnailCard: View {
                         .padding(10)
                     }
                 }
-                // Action buttons — bottom left
-                .overlay(alignment: .bottomLeading) {
+                // Action buttons — bottom right
+                .overlay(alignment: .bottomTrailing) {
                     HStack(spacing: 10) {
+                        // Favourite
                         CardActionButton(
                             systemImage: isFavorited ? "heart.fill" : "heart",
                             color: isFavorited ? .red : .white,
                             action: onToggleFavorite
                         )
+                        // Add to grocery (only when ingredients are missing)
                         if let onCart = onAddToGroceries {
                             CardActionButton(systemImage: "cart.badge.plus", action: onCart)
                         }
-                        CardActionButton(systemImage: "trash", action: onDelete)
+                        // Cook / Plan — replaces trash
+                        CardActionButton(
+                            systemImage: isPlanned
+                                ? "list.bullet.clipboard.fill"
+                                : "list.bullet.clipboard",
+                            color: isPlanned ? .orange : .white,
+                            action: onCookPlan
+                        )
                     }
                     .padding(10)
                 }
@@ -294,6 +378,45 @@ private struct VideoThumbnailCard: View {
         case "youtube":   return "Watch on YouTube"
         default:          return "Watch Video"
         }
+    }
+}
+
+// MARK: - Servings sheet (self-contained)
+
+private struct DetailServingsSheet: View {
+    let mealName: String
+    let onConfirm: (Int) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var servings = 2
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Stepper("Servings: \(servings)", value: $servings, in: 1...20)
+                } header: {
+                    Text(mealName)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .textCase(nil)
+                } footer: {
+                    Text("Logged to your cooking history and weekly stats.")
+                }
+            }
+            .navigationTitle("Mark as Cooked")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { onConfirm(servings) }
+                        .tint(.orange)
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }
 

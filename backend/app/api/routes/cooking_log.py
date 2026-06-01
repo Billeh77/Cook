@@ -23,6 +23,7 @@ class CookingLogOut(BaseModel):
     dish_name: str
     cooked_at: str
     servings: int
+    thumbnail_url: str | None = None
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
@@ -37,16 +38,18 @@ def get_cooking_history(
         .where(CookingLog.user_id == user_id)
         .order_by(CookingLog.cooked_at.desc())
     ).all()
-    return [
-        CookingLogOut(
+    result = []
+    for l in logs:
+        recipe = session.get(Recipe, l.recipe_id)
+        result.append(CookingLogOut(
             id=str(l.id),
             recipe_id=str(l.recipe_id),
             dish_name=l.dish_name,
             cooked_at=l.cooked_at.isoformat(),
             servings=l.servings,
-        )
-        for l in logs
-    ]
+            thumbnail_url=recipe.thumbnail_url if recipe else None,
+        ))
+    return result
 
 
 @router.post("/{recipe_id}", response_model=CookingLogOut, status_code=201)
@@ -90,4 +93,5 @@ def log_cooked(
         dish_name=log.dish_name,
         cooked_at=log.cooked_at.isoformat(),
         servings=log.servings,
+        thumbnail_url=recipe.thumbnail_url,
     )

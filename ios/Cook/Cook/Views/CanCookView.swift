@@ -1,8 +1,7 @@
 import SwiftUI
 
 struct CanCookView: View {
-    @State private var items: [CookabilityItem] = []
-    @State private var plannedRecipeIds: Set<String> = []
+    @EnvironmentObject var store: RecipeStore
     @State private var isLoading = false
     @State private var selectedTab = 0
     @State private var hasSetInitialTab = false
@@ -15,9 +14,9 @@ struct CanCookView: View {
     @State private var servingsItem: CookabilityItem?     // drives ServingsSheet
     @State private var actionToastMessage: String?        // short confirmation toast
 
-    private var canCook:    [CookabilityItem] { items.filter { $0.missingCount == 0 } }
-    private var almostThere:[CookabilityItem] { items.filter { $0.missingCount > 0 && $0.missingCount <= 3 } }
-    private var needMore:   [CookabilityItem] { items.filter { $0.missingCount > 3 } }
+    private var canCook:    [CookabilityItem] { store.cookabilityItems.filter { $0.missingCount == 0 } }
+    private var almostThere:[CookabilityItem] { store.cookabilityItems.filter { $0.missingCount > 0 && $0.missingCount <= 3 } }
+    private var needMore:   [CookabilityItem] { store.cookabilityItems.filter { $0.missingCount > 3 } }
 
     private let tabTitles = ["Can Cook", "Almost There", "Need More"]
 
@@ -27,7 +26,7 @@ struct CanCookView: View {
                 topTabBar
                 Divider()
 
-                if isLoading && items.isEmpty {
+                if isLoading && store.cookabilityItems.isEmpty {
                     Spacer()
                     ProgressView("Checking your pantry…").tint(.orange)
                     Spacer()
@@ -95,10 +94,10 @@ struct CanCookView: View {
                     get: { cookPlanTarget != nil },
                     set: { if !$0 { cookPlanTarget = nil } }
                 ),
+                titleVisibility: .visible,
                 presenting: cookPlanTarget,
-                titleVisibility: .visible
             ) { target in
-                if plannedRecipeIds.contains(target.id) {
+                if store.plannedRecipeIds.contains(target.id) {
                     Button("Cook Now") {
                         let t = target; cookPlanTarget = nil
                         servingsItem = t
@@ -106,8 +105,7 @@ struct CanCookView: View {
                     Button("Remove from Plan", role: .destructive) {
                         let id = target.id; cookPlanTarget = nil
                         Task {
-                            try? await APIClient.shared.removeFromPlanner(recipeId: id)
-                            plannedRecipeIds.remove(id)
+                            await store.removeFromPlanner(id: id)
                             await showActionToast("Removed from your plan")
                         }
                     }
@@ -117,27 +115,31 @@ struct CanCookView: View {
                         servingsItem = t
                     }
                     Button("Add to Plan") {
-                        let id = target.id; cookPlanTarget = nil
+                        let id = target.id
+                        let hasMissing = target.missingCount > 0
+                        cookPlanTarget = nil
                         Task {
-                            try? await APIClient.shared.addToPlanner(recipeId: id)
-                            plannedRecipeIds.insert(id)
-                            await showActionToast("Added to your meal plan")
+                            await store.addToPlanner(id: id)
+                            if hasMissing {
+                                _ = try? await APIClient.shared.generateGroceryList(recipeIds: [id])
+                                await showActionToast("Added to plan · missing items → grocery list")
+                            } else {
+                                await showActionToast("Added to your meal plan")
+                            }
                         }
                     }
                 }
                 Button("Cancel", role: .cancel) { cookPlanTarget = nil }
             } message: { target in
-                Text(plannedRecipeIds.contains(target.id) ? "This recipe is already in your plan." : "What would you like to do?")
+                Text(store.plannedRecipeIds.contains(target.id) ? "This recipe is already in your plan." : "What would you like to do?")
             }
             // ── Servings sheet ─────────────────────────────────────────────
             .sheet(item: $servingsItem) { target in
                 CookServingsSheet(mealName: target.dishName) { servings in
                     servingsItem = nil
                     Task {
-                        if (try? await APIClient.shared.logCooked(recipeId: target.id, servings: servings)) != nil {
-                            plannedRecipeIds.remove(target.id)
-                            await showActionToast("Cooked! Added to your history 🎉")
-                        }
+                        await store.markCooked(recipeId: target.id, servings: servings)
+                        await showActionToast("Cooked! Added to your history 🎉")
                     }
                 }
             }
@@ -191,7 +193,7 @@ struct CanCookView: View {
                             )) {
                                 VerticalRecipeCard(
                                     item: item,
-                                    isPlanned: plannedRecipeIds.contains(item.id),
+                                    isPlanned: store.plannedRecipeIds.contains(item.id),
                                     onAddToGroceries: {
                                         Task {
                                             _ = try? await APIClient.shared.generateGroceryList(recipeIds: [item.id])
@@ -264,10 +266,7 @@ struct CanCookView: View {
 
     private func load() async {
         isLoading = true
-        async let fetchedItems   = try? APIClient.shared.getCookability()
-        async let fetchedPlanned = try? APIClient.shared.getPlannedMeals()
-        if let f = await fetchedItems   { items = f }
-        if let p = await fetchedPlanned { plannedRecipeIds = Set(p.map { $0.recipeId }) }
+        await store.load()
         if !hasSetInitialTab {
             if !canCook.isEmpty          { selectedTab = 0 }
             else if !almostThere.isEmpty { selectedTab = 1 }
@@ -385,7 +384,7 @@ struct VerticalRecipeCard: View {
 
                 if hasTags {
                     TagFlow(spacing: 5) {
-                        if let effort = item.effort { TagChip(effortTag: effort) }
+                        if let mt = item.mealType { TagChip(mealTypeTag: mt) }
                         if let mins = item.timeMinutes {
                             TagChip(text: timeLabel(mins), icon: "clock", color: .blue)
                         }
@@ -399,7 +398,6 @@ struct VerticalRecipeCard: View {
                         if let protein = item.proteinLevel, protein == "high" {
                             TagChip(text: "High protein", icon: "bolt.fill", color: .green)
                         }
-                        if let cal = item.calorieLevel { TagChip(calorieTag: cal) }
                         if let src = item.proteinSource { TagChip(proteinSourceTag: src) }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -431,8 +429,8 @@ struct VerticalRecipeCard: View {
     }
 
     private var hasTags: Bool {
-        item.effort != nil || item.timeMinutes != nil || item.servings != nil
-        || item.proteinLevel == "high" || item.calorieLevel != nil || item.proteinSource != nil
+        item.mealType != nil || item.timeMinutes != nil || item.servings != nil
+        || item.proteinLevel == "high" || item.proteinSource != nil
     }
 
     private func timeLabel(_ mins: Int) -> String {
@@ -505,19 +503,12 @@ struct TagChip: View {
     var icon: String? = nil
     var color: Color = .gray
 
-    init(effortTag: String) {
-        switch effortTag.lowercased() {
-        case "easy":  self.init(text: "Easy",   icon: "face.smiling", color: .green)
-        case "hard":  self.init(text: "Hard",   icon: "flame",        color: .red)
-        default:      self.init(text: "Medium", icon: "minus.circle", color: .orange)
-        }
-    }
-
-    init(calorieTag: String) {
-        switch calorieTag.lowercased() {
-        case "low":  self.init(text: "Low cal",  icon: "leaf",       color: .green)
-        case "high": self.init(text: "High cal", icon: "flame.fill", color: .red)
-        default:     self.init(text: "Med cal",  icon: "equal",      color: .orange)
+    init(mealTypeTag: String) {
+        switch mealTypeTag.lowercased() {
+        case "breakfast": self.init(text: "Breakfast", icon: "sunrise.fill",  color: .orange)
+        case "lunch":     self.init(text: "Lunch",     icon: "sun.max.fill",  color: .yellow)
+        case "dessert":   self.init(text: "Dessert",   icon: "birthday.cake.fill", color: .pink)
+        default:          self.init(text: "Dinner",    icon: "moon.stars.fill", color: .indigo)
         }
     }
 

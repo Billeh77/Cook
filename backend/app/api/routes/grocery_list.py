@@ -68,15 +68,19 @@ def generate_grocery_list(
     missing_names = set(find_missing([i.canonical_name for i in all_ingredients], session, user_id))
     name_to_ing = {i.canonical_name: i for i in all_ingredients if i.canonical_name in missing_names}
 
-    existing = {
+    # Only skip items that are already on the list and not yet checked
+    existing_unchecked = {
         i.canonical_name
         for i in session.exec(
-            select(GroceryListItem).where(GroceryListItem.user_id == user_id)
+            select(GroceryListItem).where(
+                GroceryListItem.user_id == user_id,
+                GroceryListItem.checked == False,  # noqa: E712
+            )
         ).all()
     }
 
     for name, ing in name_to_ing.items():
-        if name not in existing:
+        if name not in existing_unchecked:
             session.add(GroceryListItem(
                 user_id=user_id,
                 canonical_name=name,

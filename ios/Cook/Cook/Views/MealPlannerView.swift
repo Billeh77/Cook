@@ -4,7 +4,7 @@ import SwiftUI
 
 private enum ActiveSheet: Identifiable {
     case addMeals
-    case cookConfirm(PlannedMealItem)
+    case cookConfirm(CookabilityItem)   // uses CookabilityItem — missingCount is always correct
     case logCooked
 
     var id: String {
@@ -19,8 +19,7 @@ private enum ActiveSheet: Identifiable {
 // MARK: - Meal planner view
 
 struct MealPlannerView: View {
-    @State private var planned: [PlannedMealItem] = []
-    @State private var history: [CookingLogEntry] = []
+    @EnvironmentObject var store: RecipeStore
     @State private var isLoading = false
     @State private var activeSheet: ActiveSheet?
 
@@ -29,7 +28,7 @@ struct MealPlannerView: View {
             VStack(alignment: .leading, spacing: 20) {
 
                 // ── Up Next ───────────────────────────────────────────────────
-                sectionHeader(title: "Up Next", count: planned.count) {
+                sectionHeader(title: "Up Next", count: store.plannedItems.count) {
                     Button { activeSheet = .addMeals } label: {
                         Image(systemName: "plus.circle.fill")
                             .font(.title3)
@@ -37,18 +36,22 @@ struct MealPlannerView: View {
                     }
                 }
 
-                if isLoading && planned.isEmpty {
+                if isLoading && store.plannedItems.isEmpty {
                     ProgressView().tint(.orange)
                         .frame(maxWidth: .infinity, minHeight: 80)
-                } else if planned.isEmpty {
+                } else if store.plannedItems.isEmpty {
                     plannerEmptyState
                 } else {
                     VStack(spacing: 0) {
-                        ForEach(planned) { meal in
-                            PlannerRow(meal: meal) {
-                                activeSheet = .cookConfirm(meal)
-                            }
-                            if meal.id != planned.last?.id {
+                        ForEach(store.plannedItems) { meal in
+                            PlannerRow(
+                                meal: meal,
+                                onCheck: { activeSheet = .cookConfirm(meal) },
+                                onRemove: {
+                                    Task { await store.removeFromPlanner(id: meal.id) }
+                                }
+                            )
+                            if meal.id != store.plannedItems.last?.id {
                                 Divider().padding(.leading, 70)
                             }
                         }
@@ -59,7 +62,7 @@ struct MealPlannerView: View {
 
                 // ── History ───────────────────────────────────────────────────
                 // Header always visible so user can log a cooked meal directly
-                sectionHeader(title: "Cooked", count: history.count) {
+                sectionHeader(title: "Cooked", count: store.history.count) {
                     Button { activeSheet = .logCooked } label: {
                         Image(systemName: "plus.circle.fill")
                             .font(.title3)
@@ -67,11 +70,11 @@ struct MealPlannerView: View {
                     }
                 }
 
-                if !history.isEmpty {
+                if !store.history.isEmpty {
                     VStack(spacing: 0) {
-                        ForEach(history) { entry in
+                        ForEach(store.history) { entry in
                             HistoryRow(entry: entry)
-                            if entry.id != history.last?.id {
+                            if entry.id != store.history.last?.id {
                                 Divider().padding(.leading, 70)
                             }
                         }
@@ -87,23 +90,19 @@ struct MealPlannerView: View {
         .refreshable { await load() }
         .task { await load() }
         // Single sheet driven by the enum — no competing presenters
-        .sheet(item: $activeSheet, onDismiss: { Task { await load() } }) { sheet in
+        .sheet(item: $activeSheet, onDismiss: { Task { await store.load() } }) { sheet in
             switch sheet {
             case .addMeals:
-                AddToPlannerSheet(existingIds: Set(planned.map { $0.recipeId }))
+                AddToPlannerSheet()
             case .cookConfirm(let meal):
                 ServingsSheet(mealName: meal.dishName) { servings in
                     activeSheet = nil
-                    Task { await markCooked(meal: meal, servings: servings) }
+                    Task { await store.markCooked(recipeId: meal.id, servings: servings) }
                 }
             case .logCooked:
                 LogCookedSheet { recipeId, servings in
                     activeSheet = nil
-                    Task {
-                        if let entry = try? await APIClient.shared.logCooked(recipeId: recipeId, servings: servings) {
-                            history.insert(entry, at: 0)
-                        }
-                    }
+                    Task { await store.logDirectly(recipeId: recipeId, servings: servings) }
                 }
             }
         }
@@ -163,72 +162,81 @@ struct MealPlannerView: View {
 
     private func load() async {
         isLoading = true
-        await loadPlanned()
-        await loadHistory()
+        await store.load()
         isLoading = false
-    }
-
-    private func loadPlanned() async {
-        if let p = try? await APIClient.shared.getPlannedMeals() { planned = p }
-    }
-
-    private func loadHistory() async {
-        if let h = try? await APIClient.shared.getCookingHistory() { history = h }
-    }
-
-    private func markCooked(meal: PlannedMealItem, servings: Int) async {
-        planned.removeAll { $0.id == meal.id }
-        if let entry = try? await APIClient.shared.logCooked(recipeId: meal.recipeId, servings: servings) {
-            history.insert(entry, at: 0)
-        } else {
-            if let p = try? await APIClient.shared.getPlannedMeals() { planned = p }
-        }
     }
 }
 
 // MARK: - Planner row
 
 private struct PlannerRow: View {
-    let meal: PlannedMealItem
+    let meal: CookabilityItem   // backed by cookability data — missingCount is always accurate
     let onCheck: () -> Void
+    let onRemove: () -> Void
+
+    private var statusText: String {
+        if meal.missingCount == 0 { return "Ready to cook now" }
+        if meal.missingCount <= 3 { return "Missing \(meal.missingIngredients.joined(separator: ", "))" }
+        return "Missing \(meal.missingCount) ingredients"
+    }
+
+    private var statusColor: Color {
+        meal.missingCount == 0 ? .green : .orange
+    }
 
     var body: some View {
-        HStack(spacing: 14) {
-            Group {
-                if let urlStr = meal.thumbnailURL, let url = URL(string: urlStr) {
-                    CachedAsyncImage(url: url) { img in
-                        img.resizable().scaledToFill()
-                    } placeholder: {
+        NavigationLink {
+            RecipeDetailView(recipeId: meal.id, recipeTitle: meal.dishName,
+                             missingIngredients: meal.missingIngredients)
+        } label: {
+            HStack(spacing: 14) {
+                // Thumbnail
+                Group {
+                    if let urlStr = meal.thumbnailURL, let url = URL(string: urlStr) {
+                        CachedAsyncImage(url: url) { img in img.resizable().scaledToFill() }
+                            placeholder: { Color(.systemGray5) }
+                    } else {
                         Color(.systemGray5)
+                            .overlay(Image(systemName: "fork.knife").foregroundStyle(.tertiary))
                     }
-                } else {
-                    Color(.systemGray5)
-                        .overlay(Image(systemName: "fork.knife").foregroundStyle(.tertiary))
                 }
-            }
-            .frame(width: 52, height: 52)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .frame(width: 52, height: 52)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(meal.dishName)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(2)
-                Text(meal.platform.capitalized)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+                // Info
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(meal.dishName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                    Text(statusText)
+                        .font(.caption)
+                        .foregroundStyle(statusColor)
+                }
 
-            Spacer()
+                Spacer()
 
-            Button(action: onCheck) {
-                Image(systemName: "circle")
-                    .font(.title2)
-                    .foregroundStyle(.orange)
+                // Remove button — .borderless prevents NavigationLink from capturing the tap
+                Button(action: onRemove) {
+                    Image(systemName: "minus.circle")
+                        .font(.title2)
+                        .foregroundStyle(.red.opacity(0.7))
+                }
+                .buttonStyle(.borderless)
+
+                // Mark as cooked
+                Button(action: onCheck) {
+                    Image(systemName: "circle")
+                        .font(.title2)
+                        .foregroundStyle(.orange)
+                }
+                .buttonStyle(.borderless)
             }
-            .buttonStyle(.plain)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .buttonStyle(.plain)
     }
 }
 
@@ -236,34 +244,63 @@ private struct PlannerRow: View {
 
 private struct HistoryRow: View {
     let entry: CookingLogEntry
+    @EnvironmentObject var store: RecipeStore
+
+    /// Best-available thumbnail: from cookability store (always current) or
+    /// from the log entry itself (populated by backend for new entries).
+    private var thumbnailURL: String? {
+        store.cookabilityItems.first { $0.id == entry.recipeId }?.thumbnailURL
+            ?? entry.thumbnailURL
+    }
 
     var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.title2)
-                .foregroundStyle(.green)
-                .frame(width: 52, alignment: .center)
+        NavigationLink {
+            RecipeDetailView(recipeId: entry.recipeId, recipeTitle: entry.dishName)
+        } label: {
+            HStack(spacing: 14) {
+                // Thumbnail with green checkmark badge
+                ZStack(alignment: .bottomTrailing) {
+                    Group {
+                        if let urlStr = thumbnailURL, let url = URL(string: urlStr) {
+                            CachedAsyncImage(url: url) { img in img.resizable().scaledToFill() }
+                                placeholder: { Color(.systemGray5) }
+                        } else {
+                            Color(.systemGray5)
+                                .overlay(Image(systemName: "fork.knife").foregroundStyle(.tertiary))
+                        }
+                    }
+                    .frame(width: 52, height: 52)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(entry.dishName)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(2)
-                Text(formattedDate(entry.cookedAt))
-                    .font(.caption)
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white, .green)
+                        .offset(x: 5, y: 5)
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(entry.dishName)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                    Text(formattedDate(entry.cookedAt))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Text("\(entry.servings) serving\(entry.servings == 1 ? "" : "s")")
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(.quaternary, in: Capsule())
             }
-
-            Spacer()
-
-            Text("\(entry.servings) serving\(entry.servings == 1 ? "" : "s")")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(.quaternary, in: Capsule())
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .buttonStyle(.plain)
     }
 
     private func formattedDate(_ isoString: String) -> String {
@@ -323,20 +360,22 @@ private struct ServingsSheet: View {
 // MARK: - Add to planner sheet
 
 struct AddToPlannerSheet: View {
-    let existingIds: Set<String>
-
+    @EnvironmentObject var store: RecipeStore
     @Environment(\.dismiss) private var dismiss
-    @State private var allRecipes: [RecipeListItem] = []
     @State private var selected = Set<String>()
-    @State private var isLoading = true
     @State private var isAdding = false
 
-    private var available: [RecipeListItem] { allRecipes.filter { !existingIds.contains($0.id) } }
+    /// Recipes not already on the plan, ordered by ascending missing count (cookable first).
+    private var available: [CookabilityItem] {
+        store.cookabilityItems
+            .filter { !store.plannedRecipeIds.contains($0.id) }
+            .sorted { $0.missingCount < $1.missingCount }
+    }
 
     var body: some View {
         NavigationStack {
             Group {
-                if isLoading {
+                if store.cookabilityItems.isEmpty {
                     ProgressView("Loading recipes…").tint(.orange)
                 } else if available.isEmpty {
                     Text("All your recipes are already planned.")
@@ -351,8 +390,20 @@ struct AddToPlannerSheet: View {
                                 .font(.title3)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(recipe.dishName).font(.body)
-                                Text("\(recipe.ingredientCount) ingredients")
-                                    .font(.caption).foregroundStyle(.secondary)
+                                // Readiness instead of raw ingredient count
+                                Group {
+                                    if recipe.missingCount == 0 {
+                                        Text("Ready to cook")
+                                            .foregroundStyle(.green)
+                                    } else if recipe.missingCount <= 3 {
+                                        Text("Missing \(recipe.missingIngredients.joined(separator: ", "))")
+                                            .foregroundStyle(.orange)
+                                    } else {
+                                        Text("Missing \(recipe.missingCount) ingredients")
+                                            .foregroundStyle(.orange)
+                                    }
+                                }
+                                .font(.caption)
                             }
                             Spacer()
                         }
@@ -375,8 +426,16 @@ struct AddToPlannerSheet: View {
                     Button(isAdding ? "Adding…" : "Add\(selected.isEmpty ? "" : " (\(selected.count))")") {
                         isAdding = true
                         Task {
+                            // Add all selected recipes to the plan
                             for id in selected {
-                                try? await APIClient.shared.addToPlanner(recipeId: id)
+                                await store.addToPlanner(id: id)
+                            }
+                            // Generate grocery list for any that have missing ingredients
+                            let idsWithMissing = selected.filter { id in
+                                store.cookabilityItems.first { $0.id == id }?.missingCount ?? 0 > 0
+                            }
+                            if !idsWithMissing.isEmpty {
+                                _ = try? await APIClient.shared.generateGroceryList(recipeIds: Array(idsWithMissing))
                             }
                             dismiss()
                         }
@@ -384,10 +443,6 @@ struct AddToPlannerSheet: View {
                     .disabled(selected.isEmpty || isAdding)
                     .tint(.orange)
                 }
-            }
-            .task {
-                allRecipes = (try? await APIClient.shared.getRecipes()) ?? []
-                isLoading = false
             }
         }
         .presentationDetents([.large])

@@ -30,6 +30,7 @@ class RecipeExtraction(BaseModel):
     steps: list[str] = []       # cooking instructions if present; empty list if not
     confidence: float = 0.0
     # Tags — inferred from recipe content
+    meal_type: str | None = None           # "breakfast" | "lunch" | "dinner" | "dessert"
     servings: int | None = None             # number of servings the recipe makes
     effort: str | None = None              # "easy" | "medium" | "hard"
     time_minutes: int | None = None        # total estimated time in minutes
@@ -83,6 +84,12 @@ STEPS rules:
 - If the caption has no instructions, return an empty array []
 
 TAGS — infer these from the recipe content:
+- meal_type: "breakfast" | "lunch" | "dinner" | "dessert" — the primary occasion this meal is \
+  intended for. Use "breakfast" for morning foods (eggs, pancakes, oats, smoothies, etc.), \
+  "lunch" for lighter midday meals (salads, sandwiches, wraps, soups), "dinner" for main evening \
+  meals (pasta, steak, roasts, curries, stir-fries), and "dessert" for sweets (cakes, cookies, \
+  ice cream, puddings). When ambiguous (e.g. a salad could be lunch or dinner), pick the most \
+  likely context. Return null only if genuinely impossible to determine.
 - servings: integer — how many people / portions the recipe makes (e.g. 1, 2, 4, 6). \
   Clues: "serves 4", "for 2", large quantities of protein, "whole tray", "weekly prep"
 - effort: "easy" | "medium" | "hard" — based on technique complexity and number of steps
@@ -115,6 +122,7 @@ SCHEMA = """\
 {
   "dish_name": "string or null",
   "confidence": 0.0,
+  "meal_type": "breakfast|lunch|dinner|dessert or null",
   "servings": null,
   "effort": "easy|medium|hard or null",
   "time_minutes": null,
