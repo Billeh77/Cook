@@ -52,11 +52,10 @@ async def generate_avatar(
     # 2. Generate via Replicate
     try:
         generated_bytes = await generate_chef_avatar(image_bytes)
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
-        print(f"[profile/avatar] generation error: {type(e).__name__}: {e}")
-        raise HTTPException(status_code=502, detail="Avatar generation failed — please try again")
+        detail = f"{type(e).__name__}: {e}"
+        print(f"[profile/avatar] generation error: {detail}")
+        raise HTTPException(status_code=502, detail=detail)
 
     # 3. Store in Supabase Storage
     try:

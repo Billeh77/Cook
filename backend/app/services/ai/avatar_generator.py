@@ -33,6 +33,7 @@ async def generate_chef_avatar(image_bytes: bytes) -> bytes:
 
     client = replicate.Client(api_token=settings.replicate_api_token)
 
+    # use_file_output=False → output is a plain list of URL strings (no FileOutput wrapping)
     output = await client.async_run(
         "fofr/face-to-many",
         input={
@@ -45,20 +46,16 @@ async def generate_chef_avatar(image_bytes: bytes) -> bytes:
             "output_format": "jpg",
             "output_quality": 90,
         },
+        use_file_output=False,
     )
 
-    # output is a list of FileOutput objects; grab the first one
+    # output is a list of URL strings
     if not output:
         raise RuntimeError("Replicate returned no output")
 
-    result = output[0]
-
-    # FileOutput supports read() in newer SDK versions; fall back to URL download
-    if hasattr(result, "read"):
-        return await result.read()
-
+    image_url = str(output[0])
     async with httpx.AsyncClient(timeout=60.0) as http:
-        resp = await http.get(str(result))
+        resp = await http.get(image_url)
         resp.raise_for_status()
         return resp.content
 
