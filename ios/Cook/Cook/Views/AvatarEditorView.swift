@@ -45,7 +45,7 @@ struct AvatarEditorView: View {
                             Button {
                                 showCamera = true
                             } label: {
-                                Label("Take a Selfie", systemImage: "camera.fill")
+                                Label("Take a Photo", systemImage: "camera.fill")
                                     .font(.body.weight(.semibold))
                                     .frame(maxWidth: .infinity)
                                     .padding()
@@ -148,10 +148,15 @@ struct AvatarEditorView: View {
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.green)
         } else {
-            Text("Upload a selfie and we'll turn you\ninto an adorable clay chef 🧸")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            VStack(spacing: 6) {
+                Text("Upload a photo and we'll turn you\ninto an adorable clay chef 🧸")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Label("Full or half-body photos work best", systemImage: "person.fill.checkmark")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
         }
     }
 
@@ -208,7 +213,7 @@ private struct CameraPickerView: UIViewControllerRepresentable {
         let picker = UIImagePickerController()
         picker.sourceType = .camera
         picker.cameraCaptureMode = .photo
-        picker.cameraDevice = .front
+        picker.cameraDevice = .rear
         picker.delegate = context.coordinator
         return picker
     }
