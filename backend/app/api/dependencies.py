@@ -49,12 +49,16 @@ async def get_current_user(
             detail="Auth service unreachable",
         )
 
-    if response.status_code == 401:
+    # Supabase returns 400 for expired/malformed tokens (not always 401),
+    # so treat any 4xx as "invalid or expired token" → 401 to the client.
+    if response.status_code == 200:
+        pass  # fall through to parse user ID below
+    elif 400 <= response.status_code < 500:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
         )
-    if response.status_code != 200:
+    else:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Auth service returned {response.status_code}",

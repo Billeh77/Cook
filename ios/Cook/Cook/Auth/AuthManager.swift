@@ -25,7 +25,8 @@ final class AuthManager: ObservableObject {
     // MARK: - App Group shared storage (read by Share Extension)
 
     private let appGroup = UserDefaults(suiteName: "group.com.Emile.Cook")!
-    private static let tokenKey = "supabase_access_token"
+    private static let tokenKey        = "supabase_access_token"
+    private static let refreshTokenKey = "supabase_refresh_token"
 
     // MARK: - Init
 
@@ -40,10 +41,12 @@ final class AuthManager: ObservableObject {
             switch event {
             case .initialSession, .signedIn, .tokenRefreshed:
                 isAuthenticated = session != nil
-                appGroup.set(session?.accessToken, forKey: Self.tokenKey)
+                appGroup.set(session?.accessToken,  forKey: Self.tokenKey)
+                appGroup.set(session?.refreshToken, forKey: Self.refreshTokenKey)
             case .signedOut, .userDeleted:
                 isAuthenticated = false
                 appGroup.removeObject(forKey: Self.tokenKey)
+                appGroup.removeObject(forKey: Self.refreshTokenKey)
             default:
                 break
             }

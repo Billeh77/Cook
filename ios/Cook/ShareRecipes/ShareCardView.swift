@@ -85,9 +85,16 @@ struct ShareCardView: View {
         } catch {
             let message: String
             switch error as? ExtensionAPIError {
-            case .noRecipeFound:    message = "No recipe detected in this video."
-            case .httpError(let c): message = "Server error \(c). Make sure the app is set up."
-            default:                message = "Couldn't reach the server. Are you on WiFi?"
+            case .noRecipeFound:
+                message = "No recipe detected in this video."
+            case .unauthenticated:
+                message = "Please open the Cook app and sign in, then try again."
+            case .httpError(401):
+                message = "Session expired. Open the Cook app to refresh, then try again."
+            case .httpError(let c):
+                message = "Server error \(c). Please try again in a moment."
+            default:
+                message = "Couldn't reach the server. Check your internet connection."
             }
             withAnimation(.spring(duration: 0.4)) {
                 phase = .failure(message)
