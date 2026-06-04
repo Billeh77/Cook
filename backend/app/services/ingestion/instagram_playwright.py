@@ -2,16 +2,26 @@
 Instagram ingestion using Playwright to render the page and extract visible text.
 
 Instagram blocks direct HTTP requests and oEmbed requires a Meta access token,
-so we use a headless Chromium browser. The rendered body.innerText contains the
+so we use a headless Chromium browser.  The rendered body.innerText contains the
 full creator caption — something raw HTTP cannot access.
 
+Speed strategy: a singleton Browser is kept alive for the lifetime of the process.
+Launching Chromium once (on first request) costs ~1–2 s; subsequent requests each
+open a fresh BrowserContext in the existing browser, which takes <200 ms.
+
 Best-effort: Instagram may occasionally show a login wall or change their DOM.
-When that happens, caption_text will be None and the route returns needs_manual_review.
+When that happens caption_text will be None and the route returns needs_manual_review.
 """
+import asyncio
 import re
 from urllib.parse import urlparse, urlunparse
 
-from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import (
+    async_playwright,
+    Browser,
+    Playwright,
+    TimeoutError as PlaywrightTimeoutError,
+)
 
 from app.services.ingestion.tiktok_oembed import RawVideoData
 
@@ -20,15 +30,45 @@ class InstagramIngestionError(Exception):
     pass
 
 
+# ── Singleton browser ─────────────────────────────────────────────────────────
+# Kept alive for the process lifetime so every Instagram ingest reuses the same
+# Chromium process instead of launching a new one per request.
+
+_pw: Playwright | None = None
+_browser: Browser | None = None
+_browser_lock = asyncio.Lock()
+
+_LAUNCH_ARGS = [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",   # avoids /dev/shm OOM in containers
+    "--disable-gpu",
+    "--no-first-run",
+    "--no-default-browser-check",
+]
+
+
+async def _get_browser() -> Browser:
+    """Return the shared Browser, (re)launching it if needed."""
+    global _pw, _browser
+    async with _browser_lock:
+        if _browser is None or not _browser.is_connected():
+            # Clean up any stale playwright instance
+            if _pw is not None:
+                try:
+                    await _pw.stop()
+                except Exception:
+                    pass
+            _pw = await async_playwright().start()
+            _browser = await _pw.chromium.launch(headless=True, args=_LAUNCH_ARGS)
+    return _browser
+
+
 # ── URL normalisation ─────────────────────────────────────────────────────────
 
 def _clean_instagram_url(url: str) -> str:
-    """
-    Strip tracking / referral query params (e.g. igsh=, igshid=) and keep only
-    the canonical reel path:  https://www.instagram.com/reel/<ID>/
-    """
+    """Strip tracking query params (igsh=, igshid=, …) and keep only the reel path."""
     parsed = urlparse(url)
-    # Force https + www for consistency
     clean = parsed._replace(
         scheme="https",
         netloc="www.instagram.com",
@@ -38,46 +78,59 @@ def _clean_instagram_url(url: str) -> str:
     return urlunparse(clean)
 
 
+# ── Creator name extraction ───────────────────────────────────────────────────
+
+def _parse_creator_name(og_title: str | None, og_desc: str | None) -> str | None:
+    """
+    Robustly extract the creator's display name from Instagram metadata.
+
+    og:description after JS render typically follows:
+        "12K Likes, 45 Comments - handle on Instagram: \"caption text…\""
+    That's the most reliable source — try it first.
+
+    og:title is only trusted when it contains @ or • (clear name markers).
+    If it looks like a full caption sentence we skip it entirely, which avoids
+    saving the recipe caption as the creator name.
+    """
+    # 1. og:description — "... - Name on Instagram: ..."
+    if og_desc:
+        m = re.search(r"[-–]\s*(.+?)\s+on\s+Instagram", og_desc, re.IGNORECASE)
+        if m:
+            name = m.group(1).strip()
+            if name and len(name) < 80 and name.lower() != "instagram":
+                return name
+
+    # 2. og:title — only if it contains a username marker
+    if og_title and og_title.lower() not in ("instagram", ""):
+        if "@" in og_title or "•" in og_title:
+            # "Display Name (@handle) • Instagram photos and videos"
+            m = re.match(r"^(.+?)\s*[\(@•]", og_title)
+            if m:
+                name = m.group(1).strip()
+                if name and name.lower() != "instagram":
+                    return name
+
+    return None
+
+
 # ── Text cleaning ─────────────────────────────────────────────────────────────
 
-# These strings, when found in a line, signal we've left the caption region.
 _STOP_SIGNALS = [
-    "About",
-    "Help",
-    "Press",
-    "API",
-    "Jobs",
-    "Privacy",
-    "Terms",
-    "Locations",
-    "Meta Verified",
-    "© 202",
-    "Suggested for you",
+    "About", "Help", "Press", "API", "Jobs", "Privacy", "Terms",
+    "Locations", "Meta Verified", "© 202", "Suggested for you",
     "See more posts from",
 ]
 
-# Line-level noise patterns to drop (case-insensitive).
 _NOISE_RE = re.compile(
     r"^("
-    r"Log in"
-    r"|Sign up"
-    r"|Instagram"
-    r"|See more"
-    r"|More options"
-    r"|Follow"
-    r"|Following"
-    r"|Message"
-    r"|Comments?"
+    r"Log in|Sign up|Instagram|See more|More options"
+    r"|Follow|Following|Message|Comments?"
     r"|\d[\d,.KM]* likes?"
     r"|\d[\d,.KM]* comments?"
     r"|View all \d+ comments?"
-    r"|See translation"
-    r"|Translate"
-    r"|Join .+ on Instagram"
-    r"|Keep up with"
-    r"|Share"
-    r"|Save"
-    r"|Like"
+    r"|See translation|Translate"
+    r"|Join .+ on Instagram|Keep up with"
+    r"|Share|Save|Like"
     r")$",
     re.IGNORECASE,
 )
@@ -85,36 +138,26 @@ _NOISE_RE = re.compile(
 
 def _extract_caption_region(full_text: str) -> str:
     """
-    Walk the lines of the rendered page and keep only the caption region:
+    Walk the rendered page lines and keep only the caption region:
     - Skip known UI-chrome lines.
-    - Stop as soon as a footer / "suggested" signal appears.
-    - Cap at 120 lines to avoid sending the whole comment section to the LLM.
+    - Stop at footer / 'suggested' signals.
+    - Cap at 120 lines (avoids sending a full comment thread to the LLM).
 
-    The LLM prompt already knows to extract recipe content and ignore social noise,
-    so we don't need perfect isolation — just reasonable trimming.
+    The LLM extractor already knows to ignore social noise, so we just need
+    reasonable trimming, not perfect isolation.
     """
-    lines = full_text.splitlines()
     kept: list[str] = []
-
-    for line in lines:
+    for line in full_text.splitlines():
         stripped = line.strip()
         if not stripped:
             continue
-
-        # Stop at footer / navigation boundary
         if any(sig in stripped for sig in _STOP_SIGNALS):
             break
-
-        # Drop known chrome lines
         if _NOISE_RE.match(stripped):
             continue
-
         kept.append(stripped)
-
-        # Cap to avoid ballooning context with comment threads
         if len(kept) >= 120:
             break
-
     return "\n".join(kept).strip()
 
 
@@ -122,70 +165,59 @@ def _extract_caption_region(full_text: str) -> str:
 
 async def fetch_instagram_reel(url: str) -> RawVideoData:
     """
-    Render an Instagram Reel URL with headless Chromium and extract visible text.
+    Render an Instagram Reel with the shared headless Chromium and extract text.
 
-    Returns RawVideoData with the same shape as TikTok ingestion so the route
-    can treat both platforms identically.
+    Returns RawVideoData in the same shape as TikTok ingestion so the route
+    can handle both platforms identically.
     """
     clean_url = _clean_instagram_url(url)
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=True,
-            args=[
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",   # prevents /dev/shm OOM in containers
-                "--disable-gpu",
-                "--no-first-run",
-                "--no-default-browser-check",
-            ],
-        )
-        context = await browser.new_context(
-            user_agent=(
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            ),
-            locale="en-US",
-            viewport={"width": 1280, "height": 900},
-        )
-        page = await context.new_page()
+    browser = await _get_browser()
+    context = await browser.new_context(
+        user_agent=(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        locale="en-US",
+        viewport={"width": 1280, "height": 900},
+    )
+    page = await context.new_page()
 
+    try:
+        await page.goto(clean_url, wait_until="domcontentloaded", timeout=30_000)
+
+        # Wait until the main content article appears — returns as soon as it's
+        # ready rather than sleeping a fixed amount of time.
         try:
-            await page.goto(clean_url, wait_until="domcontentloaded", timeout=30_000)
-            # Give JS time to hydrate — Instagram is a heavy SPA.
-            await page.wait_for_timeout(4_000)
+            await page.wait_for_selector("article", timeout=7_000)
         except PlaywrightTimeoutError:
-            await browser.close()
-            raise InstagramIngestionError(
-                f"Timed out loading Instagram URL: {clean_url}"
-            )
+            # No article element → probably a login wall; we'll detect that below
+            # via the short caption check.
+            pass
 
-        # Grab meta tags (now populated by client-side JS) and body text.
+        # Read metadata (populated by client-side JS after hydration).
         thumbnail_url: str | None = await page.evaluate(
             "document.querySelector('meta[property=\"og:image\"]')?.content ?? null"
         )
         og_title: str | None = await page.evaluate(
             "document.querySelector('meta[property=\"og:title\"]')?.content ?? null"
         )
+        og_desc: str | None = await page.evaluate(
+            "document.querySelector('meta[property=\"og:description\"]')?.content ?? null"
+        )
         body_text: str = await page.evaluate("document.body.innerText")
 
-        await browser.close()
+    except PlaywrightTimeoutError:
+        raise InstagramIngestionError(f"Timed out loading Instagram URL: {clean_url}")
+    finally:
+        await page.close()
+        await context.close()
 
-    # ── Parse creator name from og:title ─────────────────────────────────────
-    creator_name: str | None = None
-    if og_title and og_title.lower() not in ("instagram", ""):
-        # og:title is often "Display Name (@handle) • Instagram photos and videos"
-        m = re.match(r"^(.+?)\s*[\(@•]", og_title)
-        creator_name = m.group(1).strip() if m else og_title.split("•")[0].strip()
-        if creator_name.lower() == "instagram":
-            creator_name = None
-
-    # ── Clean body text ───────────────────────────────────────────────────────
+    creator_name = _parse_creator_name(og_title, og_desc)
     caption_text = _extract_caption_region(body_text)
 
-    # If less than ~30 chars remain, Instagram likely showed a login wall.
+    # < 30 chars remaining → Instagram showed a login wall.
     if len(caption_text) < 30:
         caption_text = None
 
