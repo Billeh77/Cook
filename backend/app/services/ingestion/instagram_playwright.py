@@ -136,10 +136,14 @@ async def fetch_instagram_reel(url: str) -> RawVideoData:
         ) from e
 
     # ── Creator name ──────────────────────────────────────────────────────────
-    # og:title will be shown to us by the user so we can pin the exact format.
-    # For now log it and leave creator_name as None until we know the string shape.
-    print(f"[instagram] og:title raw = {og_title!r}")
+    # og:title format: 'Nick Nesgoda on Instagram: "caption..."'
+    # Extract everything before " on Instagram".
     creator_name: str | None = None
+    if og_title:
+        marker = " on Instagram"
+        idx = og_title.find(marker)
+        if idx != -1:
+            creator_name = og_title[:idx].strip() or None
 
     # ── Caption ───────────────────────────────────────────────────────────────
     caption_text = _extract_caption_region(body_text)
