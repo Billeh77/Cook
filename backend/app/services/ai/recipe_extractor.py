@@ -167,7 +167,7 @@ async def extract_recipe(caption_text: str) -> RecipeExtraction:
     try:
         message = await client.messages.create(
             model="claude-opus-4-5",
-            max_tokens=2048,
+            max_tokens=4096,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_prompt}],
         )
