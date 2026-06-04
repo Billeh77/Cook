@@ -61,6 +61,11 @@ async def ingest_link(
             raw = await fetch_instagram_reel(request.url)
         except InstagramIngestionError as e:
             raise HTTPException(status_code=422, detail=str(e))
+        except Exception as e:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Instagram ingestion failed: {type(e).__name__}: {e}",
+            )
     else:
         raise HTTPException(status_code=422, detail=f"Platform '{platform}' not yet supported")
 

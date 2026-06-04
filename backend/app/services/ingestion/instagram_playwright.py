@@ -86,36 +86,36 @@ async def fetch_instagram_reel(url: str) -> RawVideoData:
     """
     clean_url = _clean_instagram_url(url)
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=True,
-            args=[
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--no-first-run",
-                "--no-default-browser-check",
-            ],
-        )
-        context = await browser.new_context(
-            user_agent=(
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            ),
-            locale="en-US",
-            viewport={"width": 1280, "height": 900},
-        )
-        page = await context.new_page()
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                headless=True,
+                args=[
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                ],
+            )
+            context = await browser.new_context(
+                user_agent=(
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0.0.0 Safari/537.36"
+                ),
+                locale="en-US",
+                viewport={"width": 1280, "height": 900},
+            )
+            page = await context.new_page()
 
-        try:
             await page.goto(clean_url, wait_until="domcontentloaded", timeout=30_000)
-            # Wait until the main content article appears, then extract.
+
             try:
                 await page.wait_for_selector("article", timeout=7_000)
             except PlaywrightTimeoutError:
-                pass  # Possible login wall — caption check below will catch it.
+                pass  # Possible login wall — caption length check below will catch it.
 
             og_title: str | None = await page.evaluate(
                 "document.querySelector('meta[property=\"og:title\"]')?.content ?? null"
@@ -125,11 +125,15 @@ async def fetch_instagram_reel(url: str) -> RawVideoData:
             )
             body_text: str = await page.evaluate("document.body.innerText")
 
-        except PlaywrightTimeoutError:
             await browser.close()
-            raise InstagramIngestionError(f"Timed out loading Instagram URL: {clean_url}")
 
-        await browser.close()
+    except PlaywrightTimeoutError as e:
+        raise InstagramIngestionError(f"Timed out loading Instagram URL: {clean_url}") from e
+    except Exception as e:
+        # Catches Playwright launch failures (missing Chromium, OOM, etc.)
+        raise InstagramIngestionError(
+            f"Playwright error for {clean_url}: {type(e).__name__}: {e}"
+        ) from e
 
     # ── Creator name ──────────────────────────────────────────────────────────
     # og:title will be shown to us by the user so we can pin the exact format.
