@@ -11,6 +11,11 @@ COPY pyproject.toml uv.lock ./
 # Install production dependencies
 RUN uv sync --frozen --no-dev
 
+# Install Playwright's Chromium browser + all required OS-level system deps.
+# Placed here (after uv sync, before COPY app/) so Chromium is a cached layer
+# and won't be re-downloaded on every code change.
+RUN uv run playwright install --with-deps chromium
+
 # Copy application code and migrations
 COPY app/ ./app/
 COPY alembic/ ./alembic/

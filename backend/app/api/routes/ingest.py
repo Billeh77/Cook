@@ -7,6 +7,7 @@ from app.models import Recipe, Ingredient
 from app.api.dependencies import get_current_user
 from app.services.ingestion.platform_detector import detect_platform, UnsupportedPlatformError
 from app.services.ingestion.tiktok_oembed import fetch_tiktok_oembed
+from app.services.ingestion.instagram_playwright import fetch_instagram_reel, InstagramIngestionError
 from app.services.ingestion.thumbnail_storage import rehost_thumbnail
 from app.services.ai.recipe_extractor import extract_recipe
 
@@ -55,6 +56,11 @@ async def ingest_link(
     # 2. Fetch raw caption
     if platform == "tiktok":
         raw = await fetch_tiktok_oembed(request.url)
+    elif platform == "instagram":
+        try:
+            raw = await fetch_instagram_reel(request.url)
+        except InstagramIngestionError as e:
+            raise HTTPException(status_code=422, detail=str(e))
     else:
         raise HTTPException(status_code=422, detail=f"Platform '{platform}' not yet supported")
 
