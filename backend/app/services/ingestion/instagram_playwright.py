@@ -135,20 +135,37 @@ async def fetch_instagram_reel(url: str) -> RawVideoData:
             f"Playwright error for {clean_url}: {type(e).__name__}: {e}"
         ) from e
 
-    # ── Creator name ──────────────────────────────────────────────────────────
-    # og:title format: 'Nick Nesgoda on Instagram: "caption..."'
-    # Extract everything before " on Instagram".
+    # ── Creator name + caption from og:title ─────────────────────────────────
+    # og:title format: 'Nick Nesgoda on Instagram: "recipe caption..."'
+    # This metadata is available even behind a login wall, making it more
+    # reliable than parsing body.innerText.
     creator_name: str | None = None
-    if og_title:
-        marker = " on Instagram"
-        idx = og_title.find(marker)
-        if idx != -1:
-            creator_name = og_title[:idx].strip() or None
+    caption_text: str | None = None
 
-    # ── Caption ───────────────────────────────────────────────────────────────
-    caption_text = _extract_caption_region(body_text)
-    if len(caption_text) < 30:
-        caption_text = None  # Likely a login wall
+    if og_title:
+        # Creator name: everything before " on Instagram"
+        on_ig_idx = og_title.find(" on Instagram")
+        if on_ig_idx != -1:
+            creator_name = og_title[:on_ig_idx].strip() or None
+
+        # Caption: everything after the first ': "'
+        cap_marker = ': "'
+        cap_idx = og_title.find(cap_marker)
+        if cap_idx != -1:
+            raw = og_title[cap_idx + len(cap_marker):]
+            if raw.endswith('"'):
+                raw = raw[:-1]
+            raw = raw.strip()
+            if len(raw) >= 30:
+                caption_text = raw
+
+    # ── Fallback: parse body text if og:title had no caption ─────────────────
+    if not caption_text:
+        body_caption = _extract_caption_region(body_text)
+        if len(body_caption) >= 30:
+            caption_text = body_caption
+
+    print(f"[instagram] creator={creator_name!r}  caption_len={len(caption_text) if caption_text else 0}")
 
     return RawVideoData(
         platform="instagram",
