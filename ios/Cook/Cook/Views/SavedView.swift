@@ -252,7 +252,9 @@ struct SavedAlbumsContent: View {
 
     private func load() async {
         isLoading = true
-        if let albs = try? await APIClient.shared.getAlbums() { albums = albs }
+        async let albs = APIClient.shared.getAlbums()
+        await store.reloadCookability()
+        if let a = try? await albs { albums = a }
         isLoading = false
     }
 
