@@ -32,14 +32,31 @@ struct SmartAlbum: Identifiable {
     let filter: (CookabilityItem) -> Bool
 }
 
-// Parses ISO 8601 strings that may or may not include fractional seconds.
+// Parses ISO 8601 strings from Python's datetime.isoformat().
+// Python may omit the timezone (naive datetime) and always includes microseconds,
+// so we try four combinations in order.
 private func parseISODate(_ s: String) -> Date? {
-    let withFrac = ISO8601DateFormatter()
-    withFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    if let d = withFrac.date(from: s) { return d }
-    let plain = ISO8601DateFormatter()
-    plain.formatOptions = [.withInternetDateTime]
-    return plain.date(from: s)
+    // 1. With timezone + fractional seconds:  2026-06-24T10:30:45.123456+00:00
+    let f1 = ISO8601DateFormatter()
+    f1.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let d = f1.date(from: s) { return d }
+
+    // 2. With timezone, no fractional seconds: 2026-06-24T10:30:45+00:00
+    let f2 = ISO8601DateFormatter()
+    f2.formatOptions = [.withInternetDateTime]
+    if let d = f2.date(from: s) { return d }
+
+    // 3. Naive + fractional seconds (most common from Supabase/SQLAlchemy):
+    //    2026-06-24T10:30:45.123456
+    let df = DateFormatter()
+    df.locale = Locale(identifier: "en_US_POSIX")
+    df.timeZone = TimeZone(identifier: "UTC")
+    df.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
+    if let d = df.date(from: s) { return d }
+
+    // 4. Naive, no fractional seconds: 2026-06-24T10:30:45
+    df.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+    return df.date(from: s)
 }
 
 // Ordered list of all possible smart albums.
