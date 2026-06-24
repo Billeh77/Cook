@@ -36,19 +36,31 @@ VALID_CUISINES = {
 }
 
 SYSTEM_PROMPT = """\
-You are a cuisine classifier for a recipe app. Given a recipe's dish name and caption,
-return the single most appropriate cuisine label — or null if the recipe does not clearly
-belong to one cuisine.
+You are a cuisine classifier for a recipe app. Classify the cuisine or return null.
 
-Rules:
-- Use exactly one of: "italian" | "mexican" | "chinese" | "japanese" | "thai" | "indian" |
-  "mediterranean" | "middle eastern" | "french" | "american" | "korean" | "greek" |
-  "spanish" | "vietnamese" | "moroccan" | "caribbean" | "latin american" | "turkish" | "persian"
-- Return null for generic, fusion, or ambiguous dishes (basic smoothies, mac and cheese,
-  plain salads, anything that does not obviously belong to one cuisine)
-- Only assign a cuisine when it is obvious and unambiguous
-- Return ONLY a JSON object: {"cuisine": "italian"} or {"cuisine": null}
-- No explanation, no markdown, no code fences
+Valid values: "italian" | "mexican" | "chinese" | "japanese" | "thai" | "indian" |
+"mediterranean" | "middle eastern" | "french" | "american" | "korean" | "greek" |
+"spanish" | "vietnamese" | "moroccan" | "caribbean" | "latin american" | "turkish" | "persian"
+
+STRONG SIGNALS — always classify these:
+- Dish name contains "Thai" or "thai" → thai
+- Dish name contains "Pad", "Panang", "Som Tam", "Larb", "Tom Yum", "Green Curry", "Red Curry" → thai
+- Dish name contains "Teriyaki", "Miso", "Ramen", "Sushi", "Katsu", "Tonkatsu", "Gyoza" → japanese
+- Dish name contains "Shawarma", "Kofta", "Lebanese", "Falafel", "Hummus" → middle eastern
+- Dish name contains "Taco", "Burrito", "Quesadilla", "Enchilada", "Salsa", "Chipotle", "Street Corn" → mexican
+- Dish name contains "Pasta", "Risotto", "Pesto", "Carbonara", "Alfredo", "Parmesan" → italian
+- Dish name contains "Pad See Ew", "Drunken Noodles", "Massaman" → thai
+- Dish name contains "Pho", "Banh Mi", "Vietnamese" → vietnamese
+- Dish name contains "Beef with Broccoli", "Fried Rice", "Kung Pao", "Dim Sum", "Dragon" → chinese
+- Dish name contains "Tzatziki", "Pita", "Gyro", "Souvlaki" → greek
+- Dish name contains "BBQ" (American style), "Buffalo", "Ranch" → american
+- Dish name contains "Brioche", "Croissant", "Coq au Vin", "Beurre" → french
+
+Return null ONLY for truly generic dishes with no cultural identity: plain wraps,
+smoothies, basic egg dishes, generic protein bowls with no ethnic seasoning.
+
+Return ONLY a JSON object: {"cuisine": "thai"} or {"cuisine": null}
+No explanation, no markdown, no code fences.
 """
 
 
