@@ -214,6 +214,7 @@ private struct RecipeDetailContent: View {
                             TagChip(text: "High protein", icon: "bolt.fill", color: .green)
                         }
                         if let src = recipe.proteinSource { TagChip(proteinSourceTag: src) }
+                        if let c = recipe.cuisine { TagChip(cuisineTag: c) }
                     }
                 }
 
@@ -276,7 +277,7 @@ private struct RecipeDetailContent: View {
 
     private var hasTags: Bool {
         recipe.mealType != nil || recipe.timeMinutes != nil || recipe.servings != nil
-        || recipe.proteinLevel == "high" || recipe.proteinSource != nil
+        || recipe.proteinLevel == "high" || recipe.proteinSource != nil || recipe.cuisine != nil
     }
 
     private func timeLabel(_ mins: Int) -> String {

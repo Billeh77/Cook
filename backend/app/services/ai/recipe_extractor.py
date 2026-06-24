@@ -38,6 +38,7 @@ class RecipeExtraction(BaseModel):
     protein_level: str | None = None      # "high" | "medium" | "low"
     calorie_level: str | None = None      # "low" | "medium" | "high" — per serving
     protein_source: str | None = None    # "chicken" | "beef" | "pork" | "fish" | "seafood" | "eggs" | "lamb" | "turkey" | "vegan" | "vegetarian"
+    cuisine: str | None = None           # e.g. "italian" | "mexican" | "chinese" | "japanese" | "thai" | "indian" | "mediterranean" | "middle eastern" | "french" | "american" | "korean" | "greek" | "spanish" | "vietnamese" | "moroccan"
 
 
 # ── Prompt ────────────────────────────────────────────────────────────────────
@@ -108,6 +109,13 @@ TAGS — infer these from the recipe content:
   Use "vegan" if the recipe contains no animal products at all. \
   Use "vegetarian" if it uses dairy or eggs but no meat or fish. \
   Use null if the protein source is unclear or genuinely mixed.
+- cuisine: the primary cuisine of the dish as a single lowercase string. \
+  Use exactly one of: "italian" | "mexican" | "chinese" | "japanese" | "thai" | \
+  "indian" | "mediterranean" | "middle eastern" | "french" | "american" | "korean" | \
+  "greek" | "spanish" | "vietnamese" | "moroccan" | "caribbean" | "latin american" | \
+  "turkish" | "persian". \
+  Pick the most specific and accurate match. Return null only if the cuisine is genuinely \
+  impossible to determine (e.g. a generic smoothie with no cultural origin).
 
 CONFIDENCE:
 - 1.0 = full recipe with quantities and most ingredients clearly listed
@@ -130,6 +138,7 @@ SCHEMA = """\
   "protein_level": "high|medium|low or null",
   "calorie_level": "low|medium|high or null",
   "protein_source": "chicken|beef|pork|fish|seafood|eggs|lamb|turkey|vegan|vegetarian or null",
+  "cuisine": "italian|mexican|chinese|japanese|thai|indian|mediterranean|middle eastern|french|american|korean|greek|spanish|vietnamese|moroccan|caribbean|latin american|turkish|persian or null",
   "ingredients": [
     {
       "raw_text": "exact text from caption including quantity and descriptors",

@@ -34,6 +34,7 @@ class Recipe(SQLModel, table=True):
     calorie_level: Optional[str] = None   # "low" | "medium" | "high" — per serving
     protein_source: Optional[str] = None  # "chicken" | "beef" | "pork" | "fish" | "seafood" | "eggs" | "lamb" | "turkey" | "vegan" | "vegetarian"
     is_favorited: bool = False
+    cuisine: Optional[str] = None        # e.g. "italian" | "chinese" | "thai" | …
 
 
 class Ingredient(SQLModel, table=True):

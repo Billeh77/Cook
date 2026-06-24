@@ -95,10 +95,11 @@ struct RecipeDetail: Codable, Identifiable {
     let proteinLevel: String?
     let calorieLevel: String?
     let proteinSource: String?
+    let cuisine: String?
     let isFavorited: Bool
 
     enum CodingKeys: String, CodingKey {
-        case id, platform, confidence, steps, ingredients
+        case id, platform, confidence, steps, ingredients, cuisine
         case dishName     = "dish_name"
         case creatorName  = "creator_name"
         case sourceURL    = "source_url"
@@ -136,13 +137,14 @@ struct RecipeDetail: Codable, Identifiable {
         proteinLevel  = try c.decodeIfPresent(String.self,     forKey: .proteinLevel)
         calorieLevel  = try c.decodeIfPresent(String.self,     forKey: .calorieLevel)
         proteinSource = try c.decodeIfPresent(String.self,     forKey: .proteinSource)
+        cuisine       = try c.decodeIfPresent(String.self,     forKey: .cuisine)
         isFavorited   = try c.decodeIfPresent(Bool.self,       forKey: .isFavorited)   ?? false
     }
 }
 
 // MARK: - Cookability (home screen)
 
-struct CookabilityItem: Codable, Identifiable {
+struct CookabilityItem: Codable, Identifiable, Hashable {
     let id: String
     let dishName: String
     let creatorName: String?
@@ -159,12 +161,13 @@ struct CookabilityItem: Codable, Identifiable {
     let proteinLevel: String?
     let calorieLevel: String?
     let proteinSource: String?
+    let cuisine: String?
     let isFavorited: Bool
     let missingCount: Int
     let missingIngredients: [String]
 
     enum CodingKeys: String, CodingKey {
-        case id, platform, servings, effort
+        case id, platform, servings, effort, cuisine
         case dishName          = "dish_name"
         case creatorName       = "creator_name"
         case sourceURL         = "source_url"
@@ -200,6 +203,7 @@ struct CookabilityItem: Codable, Identifiable {
         proteinLevel     = try c.decodeIfPresent(String.self,     forKey: .proteinLevel)
         calorieLevel     = try c.decodeIfPresent(String.self,     forKey: .calorieLevel)
         proteinSource    = try c.decodeIfPresent(String.self,     forKey: .proteinSource)
+        cuisine          = try c.decodeIfPresent(String.self,     forKey: .cuisine)
         isFavorited      = try c.decodeIfPresent(Bool.self,       forKey: .isFavorited)      ?? false
         missingCount     = try c.decodeIfPresent(Int.self,        forKey: .missingCount)     ?? 0
         missingIngredients = try c.decodeIfPresent([String].self, forKey: .missingIngredients) ?? []

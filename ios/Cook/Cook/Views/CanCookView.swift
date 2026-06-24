@@ -531,6 +531,37 @@ struct TagChip: View {
         self.init(text: label, icon: icon, color: .teal)
     }
 
+    init(cuisineTag: String) {
+        let icon: String
+        let color: Color
+        switch cuisineTag.lowercased() {
+        case "italian":        icon = "fork.knife";        color = .red
+        case "mexican":        icon = "flame.fill";        color = .orange
+        case "chinese":        icon = "moon.fill";         color = .yellow
+        case "japanese":       icon = "sun.horizon.fill";  color = .red
+        case "thai":           icon = "leaf.fill";         color = .green
+        case "indian":         icon = "sparkles";          color = .orange
+        case "mediterranean":  icon = "water.waves";       color = .blue
+        case "middle eastern": icon = "moon.stars.fill";   color = .purple
+        case "french":         icon = "wineglass.fill";    color = .pink
+        case "american":       icon = "star.fill";         color = .blue
+        case "korean":         icon = "flame.fill";        color = .red
+        case "greek":          icon = "sun.max.fill";      color = .cyan
+        case "spanish":        icon = "sun.max.fill";      color = .yellow
+        case "vietnamese":     icon = "leaf.fill";         color = .mint
+        case "moroccan":       icon = "moon.fill";         color = .orange
+        case "caribbean":      icon = "water.waves";       color = .teal
+        case "latin american": icon = "flame.fill";        color = .orange
+        case "turkish":        icon = "moon.stars.fill";   color = .indigo
+        case "persian":        icon = "sparkles";          color = .purple
+        default:               icon = "fork.knife";        color = .gray
+        }
+        let label = cuisineTag.split(separator: " ")
+            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            .joined(separator: " ")
+        self.init(text: label, icon: icon, color: color)
+    }
+
     init(text: String, icon: String? = nil, color: Color = .gray) {
         self.text = text
         self.icon = icon

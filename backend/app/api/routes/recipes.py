@@ -43,6 +43,7 @@ class RecipeOut(BaseModel):
     protein_level: str | None = None
     calorie_level: str | None = None
     protein_source: str | None = None
+    cuisine: str | None = None
     is_favorited: bool = False
 
 
@@ -63,6 +64,7 @@ class RecipeListItem(BaseModel):
     protein_level: str | None = None
     calorie_level: str | None = None
     protein_source: str | None = None
+    cuisine: str | None = None
     is_favorited: bool = False
 
 
@@ -83,6 +85,7 @@ class CookabilityItem(BaseModel):
     protein_level: str | None = None
     calorie_level: str | None = None
     protein_source: str | None = None
+    cuisine: str | None = None
     is_favorited: bool = False
     missing_count: int = 0
     missing_ingredients: list[str] = []
@@ -142,6 +145,7 @@ def get_cookability(
             protein_level=r.protein_level,
             calorie_level=r.calorie_level,
             protein_source=r.protein_source,
+            cuisine=r.cuisine,
             is_favorited=r.is_favorited or False,
             missing_count=len(missing),
             missing_ingredients=missing,
@@ -194,6 +198,7 @@ def get_recipe(
         protein_level=recipe.protein_level,
         calorie_level=recipe.calorie_level,
         protein_source=recipe.protein_source,
+        cuisine=recipe.cuisine,
         is_favorited=recipe.is_favorited or False,
     )
 
@@ -256,5 +261,6 @@ def _list_item(r: Recipe, ingredient_count: int) -> RecipeListItem:
         servings=r.servings, effort=r.effort, time_minutes=r.time_minutes,
         is_batch_prep=r.is_batch_prep or False, protein_level=r.protein_level,
         calorie_level=r.calorie_level, protein_source=r.protein_source,
+        cuisine=r.cuisine,
         is_favorited=r.is_favorited or False,
     )

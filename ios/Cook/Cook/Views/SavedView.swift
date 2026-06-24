@@ -76,6 +76,36 @@ let allSmartAlbums: [SmartAlbum] = [
     SmartAlbum(id: "mealprep",  name: "Meal Prep",    icon: "tray.fill",           color: .purple) {
         ($0.servings ?? 0) >= 6
     },
+    SmartAlbum(id: "dessert", name: "Dessert", icon: "birthday.cake.fill", color: .red) {
+        $0.mealType == "dessert"
+    },
+
+    // ── Recently added ────────────────────────────────────────────────────────
+    SmartAlbum(id: "recent", name: "Recently Added", icon: "clock.arrow.circlepath", color: .orange) {
+        guard let date = ISO8601DateFormatter().date(from: $0.createdAt) else { return false }
+        return Date().timeIntervalSince(date) <= 5 * 24 * 3600
+    },
+
+    // ── Cuisine ───────────────────────────────────────────────────────────────
+    SmartAlbum(id: "cuisine_italian",       name: "Italian",        icon: "fork.knife",        color: .red)     { $0.cuisine == "italian" },
+    SmartAlbum(id: "cuisine_mexican",       name: "Mexican",        icon: "flame.fill",        color: .orange)  { $0.cuisine == "mexican" },
+    SmartAlbum(id: "cuisine_chinese",       name: "Chinese",        icon: "moon.fill",         color: .yellow)  { $0.cuisine == "chinese" },
+    SmartAlbum(id: "cuisine_japanese",      name: "Japanese",       icon: "sun.horizon.fill",  color: .red)     { $0.cuisine == "japanese" },
+    SmartAlbum(id: "cuisine_thai",          name: "Thai",           icon: "leaf.fill",         color: .green)   { $0.cuisine == "thai" },
+    SmartAlbum(id: "cuisine_indian",        name: "Indian",         icon: "sparkles",          color: .orange)  { $0.cuisine == "indian" },
+    SmartAlbum(id: "cuisine_mediterranean", name: "Mediterranean",  icon: "water.waves",       color: .blue)    { $0.cuisine == "mediterranean" },
+    SmartAlbum(id: "cuisine_middle_eastern",name: "Middle Eastern", icon: "moon.stars.fill",   color: .purple)  { $0.cuisine == "middle eastern" },
+    SmartAlbum(id: "cuisine_french",        name: "French",         icon: "wineglass.fill",    color: .pink)    { $0.cuisine == "french" },
+    SmartAlbum(id: "cuisine_american",      name: "American",       icon: "star.fill",         color: .blue)    { $0.cuisine == "american" },
+    SmartAlbum(id: "cuisine_korean",        name: "Korean",         icon: "flame.fill",        color: .red)     { $0.cuisine == "korean" },
+    SmartAlbum(id: "cuisine_greek",         name: "Greek",          icon: "sun.max.fill",      color: .cyan)    { $0.cuisine == "greek" },
+    SmartAlbum(id: "cuisine_spanish",       name: "Spanish",        icon: "sun.max.fill",      color: .yellow)  { $0.cuisine == "spanish" },
+    SmartAlbum(id: "cuisine_vietnamese",    name: "Vietnamese",     icon: "leaf.fill",         color: .mint)    { $0.cuisine == "vietnamese" },
+    SmartAlbum(id: "cuisine_moroccan",      name: "Moroccan",       icon: "moon.fill",         color: .orange)  { $0.cuisine == "moroccan" },
+    SmartAlbum(id: "cuisine_caribbean",     name: "Caribbean",      icon: "water.waves",       color: .teal)    { $0.cuisine == "caribbean" },
+    SmartAlbum(id: "cuisine_latin",         name: "Latin American", icon: "flame.fill",        color: .orange)  { $0.cuisine == "latin american" },
+    SmartAlbum(id: "cuisine_turkish",       name: "Turkish",        icon: "moon.stars.fill",   color: .indigo)  { $0.cuisine == "turkish" },
+    SmartAlbum(id: "cuisine_persian",       name: "Persian",        icon: "sparkles",          color: .purple)  { $0.cuisine == "persian" },
 ]
 
 // MARK: - Album grid content
@@ -213,9 +243,16 @@ struct SavedAlbumsContent: View {
 struct SmartAlbumDetailView: View {
     let album: SmartAlbum
     @EnvironmentObject var store: RecipeStore
+    @State private var searchText = ""
 
     private var recipes: [CookabilityItem] {
         store.cookabilityItems.filter(album.filter)
+    }
+
+    private var filtered: [CookabilityItem] {
+        searchText.isEmpty
+            ? recipes
+            : recipes.filter { $0.dishName.localizedCaseInsensitiveContains(searchText) }
     }
 
     var body: some View {
@@ -235,7 +272,7 @@ struct SmartAlbumDetailView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List(recipes) { item in
+                List(filtered) { item in
                     NavigationLink(destination: RecipeDetailView(
                         recipeId: item.id,
                         recipeTitle: item.dishName,
@@ -245,6 +282,7 @@ struct SmartAlbumDetailView: View {
                     }
                 }
                 .listStyle(.plain)
+                .searchable(text: $searchText, prompt: "Search recipes")
             }
         }
         .navigationTitle(album.name)

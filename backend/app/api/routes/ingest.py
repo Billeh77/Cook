@@ -108,6 +108,7 @@ async def ingest_link(
         protein_level=extraction.protein_level,
         calorie_level=extraction.calorie_level,
         protein_source=extraction.protein_source,
+        cuisine=extraction.cuisine,
     )
     session.add(db_recipe)
     session.flush()  # assigns db_recipe.id without committing
