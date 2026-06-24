@@ -32,9 +32,25 @@ struct SmartAlbum: Identifiable {
     let filter: (CookabilityItem) -> Bool
 }
 
+// Parses ISO 8601 strings that may or may not include fractional seconds.
+private func parseISODate(_ s: String) -> Date? {
+    let withFrac = ISO8601DateFormatter()
+    withFrac.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let d = withFrac.date(from: s) { return d }
+    let plain = ISO8601DateFormatter()
+    plain.formatOptions = [.withInternetDateTime]
+    return plain.date(from: s)
+}
+
 // Ordered list of all possible smart albums.
 // Only those with at least one matching recipe are shown.
 let allSmartAlbums: [SmartAlbum] = [
+    // ── Recently Saved (top, after Favorites) ─────────────────────────────────
+    SmartAlbum(id: "recent", name: "Recently Saved", icon: "clock.arrow.circlepath", color: .orange) {
+        guard let date = parseISODate($0.createdAt) else { return false }
+        return Date().timeIntervalSince(date) <= 5 * 24 * 3600
+    },
+
     SmartAlbum(id: "breakfast", name: "Breakfast",    icon: "sunrise.fill",       color: .orange) {
         $0.mealType == "breakfast"
     },
@@ -78,12 +94,6 @@ let allSmartAlbums: [SmartAlbum] = [
     },
     SmartAlbum(id: "dessert", name: "Dessert", icon: "birthday.cake.fill", color: .red) {
         $0.mealType == "dessert"
-    },
-
-    // ── Recently added ────────────────────────────────────────────────────────
-    SmartAlbum(id: "recent", name: "Recently Added", icon: "clock.arrow.circlepath", color: .orange) {
-        guard let date = ISO8601DateFormatter().date(from: $0.createdAt) else { return false }
-        return Date().timeIntervalSince(date) <= 5 * 24 * 3600
     },
 
     // ── Cuisine ───────────────────────────────────────────────────────────────
