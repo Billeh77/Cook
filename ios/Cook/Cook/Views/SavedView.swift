@@ -45,12 +45,6 @@ private func parseISODate(_ s: String) -> Date? {
 // Ordered list of all possible smart albums.
 // Only those with at least one matching recipe are shown.
 let allSmartAlbums: [SmartAlbum] = [
-    // ── Recently Saved (top, after Favorites) ─────────────────────────────────
-    SmartAlbum(id: "recent", name: "Recently Saved", icon: "clock.arrow.circlepath", color: .orange) {
-        guard let date = parseISODate($0.createdAt) else { return false }
-        return Date().timeIntervalSince(date) <= 5 * 24 * 3600
-    },
-
     SmartAlbum(id: "breakfast", name: "Breakfast",    icon: "sunrise.fill",       color: .orange) {
         $0.mealType == "breakfast"
     },
@@ -139,6 +133,19 @@ struct SavedAlbumsContent: View {
 
     private var allItems: [CookabilityItem] { store.cookabilityItems }
     private var favoriteItems: [CookabilityItem] { store.cookabilityItems.filter { $0.isFavorited } }
+    private var recentItems: [CookabilityItem] {
+        store.cookabilityItems.filter {
+            guard let date = parseISODate($0.createdAt) else { return false }
+            return Date().timeIntervalSince(date) <= 5 * 24 * 3600
+        }
+    }
+    private let recentlySavedAlbum = SmartAlbum(
+        id: "recent", name: "Recently Saved",
+        icon: "clock.arrow.circlepath", color: .orange
+    ) {
+        guard let date = parseISODate($0.createdAt) else { return false }
+        return Date().timeIntervalSince(date) <= 5 * 24 * 3600
+    }
 
     var body: some View {
         Group {
@@ -173,6 +180,18 @@ struct SavedAlbumsContent: View {
                             }
                             .buttonStyle(.plain)
                         }
+
+                        // ── Recently Saved (always visible) ───────────────────
+                        NavigationLink(destination: SmartAlbumDetailView(album: recentlySavedAlbum)) {
+                            AlbumGridCell(
+                                name: "Recently Saved",
+                                count: recentItems.count,
+                                coverURLs: recentItems.prefix(4).compactMap { $0.thumbnailURL },
+                                systemIcon: "clock.arrow.circlepath",
+                                iconColor: .orange
+                            )
+                        }
+                        .buttonStyle(.plain)
 
                         // ── Smart albums (non-empty only) ─────────────────────
                         ForEach(smartAlbumMatches, id: \.0.id) { album, matches in
