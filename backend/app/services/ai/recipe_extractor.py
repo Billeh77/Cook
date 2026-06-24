@@ -109,13 +109,14 @@ TAGS — infer these from the recipe content:
   Use "vegan" if the recipe contains no animal products at all. \
   Use "vegetarian" if it uses dairy or eggs but no meat or fish. \
   Use null if the protein source is unclear or genuinely mixed.
-- cuisine: the primary cuisine of the dish as a single lowercase string. \
+- cuisine: the primary cuisine of the dish, if clearly identifiable. \
   Use exactly one of: "italian" | "mexican" | "chinese" | "japanese" | "thai" | \
   "indian" | "mediterranean" | "middle eastern" | "french" | "american" | "korean" | \
   "greek" | "spanish" | "vietnamese" | "moroccan" | "caribbean" | "latin american" | \
   "turkish" | "persian". \
-  Pick the most specific and accurate match. Return null only if the cuisine is genuinely \
-  impossible to determine (e.g. a generic smoothie with no cultural origin).
+  Return null for generic, fusion, or unclear dishes — null is the correct answer for \
+  things like a basic smoothie, a generic salad, mac and cheese, or any dish that does \
+  not clearly belong to one cuisine. Only assign a cuisine when it is obvious and unambiguous.
 
 CONFIDENCE:
 - 1.0 = full recipe with quantities and most ingredients clearly listed
